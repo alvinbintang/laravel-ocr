@@ -170,23 +170,22 @@ class ExcelExportController extends Controller
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         
-        // Set column widths to match RAB format
-        $sheet->getColumnDimension('A')->setWidth(12);
-        $sheet->getColumnDimension('B')->setWidth(60);
+        // Set column widths to match original RAB format
+        $sheet->getColumnDimension('A')->setWidth(10);
+        $sheet->getColumnDimension('B')->setWidth(50);
         $sheet->getColumnDimension('C')->setWidth(15);
-        $sheet->getColumnDimension('D')->setWidth(20);
-        $sheet->getColumnDimension('E')->setWidth(20);
+        $sheet->getColumnDimension('D')->setWidth(18);
+        $sheet->getColumnDimension('E')->setWidth(18);
         
         $row = 1;
         
-        // Create bordered header section like RAB format
+        // Header section with thick border
         $headerStartRow = $row;
         
-        // Title section with border
         $sheet->setCellValue('A' . $row, $data['title']);
         $sheet->mergeCells('A' . $row . ':E' . $row);
         $sheet->getStyle('A' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle('A' . $row)->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A' . $row)->getFont()->setBold(true)->setSize(12);
         $row++;
         
         $sheet->setCellValue('A' . $row, $data['organization']);
@@ -201,24 +200,21 @@ class ExcelExportController extends Controller
         $sheet->getStyle('A' . $row)->getFont()->setBold(true);
         $row++;
         
-        // Add border around header section
+        // Add thick border around header
         $headerRange = 'A' . $headerStartRow . ':E' . ($row - 1);
         $sheet->getStyle($headerRange)->getBorders()->getOutline()->setBorderStyle(Border::BORDER_THICK);
         $row++;
         
-        // Information section in bordered table format
+        // Information section with thick border
         $infoStartRow = $row;
         
-        // Jenis APBDes row
         $sheet->setCellValue('A' . $row, 'Jenis APBDes :');
         $sheet->setCellValue('B' . $row, $data['type']);
         $sheet->mergeCells('B' . $row . ':E' . $row);
         $row++;
         
-        // Empty row for spacing
-        $row++;
+        $row++; // Empty row
         
-        // Bidang, Sub Bidang, Kegiatan section
         $sheet->setCellValue('A' . $row, 'Bidang');
         $sheet->setCellValue('B' . $row, ':');
         $sheet->setCellValue('C' . $row, $data['bidang']);
@@ -249,15 +245,15 @@ class ExcelExportController extends Controller
         $sheet->mergeCells('C' . $row . ':E' . $row);
         $row++;
         
-        // Add border around info section
+        // Add thick border around info section
         $infoRange = 'A' . $infoStartRow . ':E' . ($row - 1);
         $sheet->getStyle($infoRange)->getBorders()->getOutline()->setBorderStyle(Border::BORDER_THICK);
         $row++;
         
-        // ANGGARAN section
-        $anggaranStartRow = $row;
+        // Table section with thick border
+        $tableStartRow = $row;
         
-        // Table headers with proper RAB format
+        // Table headers - simple format like original
         $sheet->setCellValue('A' . $row, 'KODE');
         $sheet->setCellValue('B' . $row, 'URAIAN');
         $sheet->setCellValue('C' . $row, 'ANGGARAN');
@@ -278,70 +274,39 @@ class ExcelExportController extends Controller
         $sheet->setCellValue('E' . $row, '5');
         $row++;
         
-        // Style table headers
-        $headerRange1 = 'A' . ($row - 3) . ':E' . ($row - 3);
-        $headerRange2 = 'A' . ($row - 2) . ':E' . ($row - 2);
-        $headerRange3 = 'A' . ($row - 1) . ':E' . ($row - 1);
+        // Style headers with borders
+        for ($i = $tableStartRow; $i < $row; $i++) {
+            $headerRange = 'A' . $i . ':E' . $i;
+            $sheet->getStyle($headerRange)->getFont()->setBold(true);
+            $sheet->getStyle($headerRange)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle($headerRange)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+        }
         
-        $sheet->getStyle($headerRange1)->getFont()->setBold(true);
-        $sheet->getStyle($headerRange1)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle($headerRange1)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-        
-        $sheet->getStyle($headerRange2)->getFont()->setBold(true);
-        $sheet->getStyle($headerRange2)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle($headerRange2)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-        
-        $sheet->getStyle($headerRange3)->getFont()->setBold(true);
-        $sheet->getStyle($headerRange3)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle($headerRange3)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-        
-        // Data rows
+        // Data rows with proper formatting
         foreach ($data['items'] as $item) {
             $sheet->setCellValue('A' . $row, $item['code']);
             $sheet->setCellValue('B' . $row, $item['description']);
             $sheet->setCellValue('C' . $row, $item['volume']);
-            $sheet->setCellValue('D' . $row, is_numeric($item['unit_price']) ? number_format($item['unit_price'], 2, ',', '.') : $item['unit_price']);
-            $sheet->setCellValue('E' . $row, is_numeric($item['amount']) ? number_format($item['amount'], 2, ',', '.') : $item['amount']);
+            $sheet->setCellValue('D' . $row, is_numeric($item['unit_price']) && $item['unit_price'] > 0 ? number_format($item['unit_price'], 2, ',', '.') : '');
+            $sheet->setCellValue('E' . $row, is_numeric($item['amount']) && $item['amount'] > 0 ? number_format($item['amount'], 2, ',', '.') : $item['amount']);
             
             // Style data rows
             $dataRange = 'A' . $row . ':E' . $row;
             $sheet->getStyle($dataRange)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-            $sheet->getStyle('D' . $row . ':E' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             $sheet->getStyle('A' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle('D' . $row . ':E' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            
+            // Bold for main categories (codes like 5, 2.02.02, 5.2.1.)
+            if (preg_match('/^\d+$/', $item['code']) || preg_match('/^\d+\.\d+\.\d+$/', $item['code']) || preg_match('/^\d+\.\d+\.\d+\.$/', $item['code'])) {
+                $sheet->getStyle('A' . $row . ':E' . $row)->getFont()->setBold(true);
+            }
+            
             $row++;
         }
         
-        // Add border around the entire ANGGARAN section
-        $anggaranRange = 'A' . $anggaranStartRow . ':E' . ($row - 1);
-        $sheet->getStyle($anggaranRange)->getBorders()->getOutline()->setBorderStyle(Border::BORDER_THICK);
-        $row++;
-        
-        // JUMLAH (Rp) section
-        $sheet->setCellValue('A' . $row, 'JUMLAH (Rp)');
-        $sheet->mergeCells('A' . $row . ':D' . $row);
-        $sheet->setCellValue('E' . $row, is_numeric($data['total_amount']) ? number_format($data['total_amount'], 2, ',', '.') : $data['total_amount']);
-        
-        $totalRange = 'A' . $row . ':E' . $row;
-        $sheet->getStyle($totalRange)->getFont()->setBold(true);
-        $sheet->getStyle($totalRange)->getBorders()->getOutline()->setBorderStyle(Border::BORDER_THICK);
-        $sheet->getStyle('A' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle('E' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-        $row += 2;
-        
-        // Signature section
-        $sheet->setCellValue('A' . $row, 'Disetujui,');
-        $sheet->setCellValue('C' . $row, 'Telah Diverifikasi');
-        $sheet->setCellValue('E' . $row, 'LUWORO, 31 Desember 2024');
-        $row++;
-        
-        $sheet->setCellValue('A' . $row, 'KEPALA DESA');
-        $sheet->setCellValue('C' . $row, 'SEKRETARIS DESA');
-        $sheet->setCellValue('E' . $row, 'Pelaksana Kegiatan Anggaran,');
-        $row += 3;
-        
-        $sheet->setCellValue('A' . $row, 'IFFAN RIFAI FATUMULOH');
-        $sheet->setCellValue('C' . $row, 'DARMANTO');
-        $sheet->setCellValue('E' . $row, 'MARDJI');
+        // Add thick border around entire table
+        $tableRange = 'A' . $tableStartRow . ':E' . ($row - 1);
+        $sheet->getStyle($tableRange)->getBorders()->getOutline()->setBorderStyle(Border::BORDER_THICK);
         
         return $spreadsheet;
     }
