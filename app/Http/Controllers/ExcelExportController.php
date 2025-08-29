@@ -20,12 +20,13 @@ class ExcelExportController extends Controller
             return redirect()->back()->with('error', 'Data OCR belum selesai diproses atau tidak ada hasil.');
         }
 
-        $parsedData = $this->parseOcrData($ocrResult->text);
+        // --- Perubahan Kunci ada di sini ---
+        $parsedData = $this->parseOcrDataV2($ocrResult->text); 
+        
         $spreadsheet = $this->createExcelFile($parsedData);
         
         $filename = 'RAB_' . pathinfo($ocrResult->filename, PATHINFO_FILENAME) . '_' . date('Y-m-d_H-i-s') . '.xlsx';
         
-        // Set headers untuk download
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment;filename="' . $filename . '"');
         header('Cache-Control: max-age=0');
@@ -34,128 +35,127 @@ class ExcelExportController extends Controller
         $writer->save('php://output');
         exit;
     }
-    
+
     /**
-     * Fungsi parseOcrData yang telah diperbaiki menjadi lebih fleksibel dan cerdas.
-     * Mampu menangani format header dinamis dan item tabel yang bervariasi.
+     * Membersihkan string angka dari format mata uang.
+     * Contoh: "1.234.567,00" menjadi "1234567.00"
      */
-    private function parseOcrData($text)
+    private function cleanNumber($string)
+    {
+        // Hapus semua titik pemisah ribuan
+        $string = str_replace('.', '', $string);
+        // Ubah koma desimal menjadi titik
+        $string = str_replace(',', '.', $string);
+        return preg_replace('/[^0-9.]/', '', $string);
+    }
+
+    /**
+     * ========================================================================
+     * FUNGSI PARSING BARU (V2) - Lebih Kuat dan Fleksibel
+     * ========================================================================
+     */
+    private function parseOcrDataV2($text)
     {
         $lines = explode("\n", $text);
         $data = [
-            'title' => 'RENCANA ANGGARAN BIAYA (RAB)',
-            'organization' => '',
-            'year' => '',
-            'type' => 'APBDes Awal', // Default value, bisa di-override
-            'bidang' => '',
-            'sub_bidang' => '',
-            'kegiatan' => '',
-            'waktu_pelaksanaan' => '',
-            'output' => '',
-            'items' => []
+            'title'        => 'RENCANA ANGGARAN BIAYA (RAB)',
+            'organization' => '', 'year' => '', 'type' => '',
+            'bidang'       => '', 'sub_bidang' => '', 'kegiatan' => '',
+            'waktu_pelaksanaan' => '', 'output' => '',
+            'items'        => []
         ];
-        
+
         $inItemSection = false;
-        $lastKey = null; // Variabel state untuk parsing header
 
         foreach ($lines as $line) {
             $line = trim($line);
-            if (empty($line) || strpos($line, '=== Halaman ===') !== false || preg_match('/^\d{2}\/\d{2}\/\d{4}/', $line)) continue;
-
-            // Stop parsing header jika sudah masuk bagian tabel
-            if (preg_match('/KODE\s+URAIAN/', $line)) {
-                $inItemSection = true;
+            if (empty($line) || strpos(strtolower($line), 'halaman') !== false || strpos(strtolower($line), 'printed by') !== false) {
                 continue;
             }
 
+            // Trigger untuk memulai bagian tabel
+            if (preg_match('/^\d\.\s+BELANJA/i', $line) || preg_match('/KODE\s+URAIAN/i', $line)) {
+                $inItemSection = true;
+            }
+            
             if (!$inItemSection) {
-                // Parsing Header Utama
-                if (strpos($line, 'PEMERINTAH DESA') !== false) {
-                    $data['organization'] = $line;
-                } elseif (strpos($line, 'TAHUN ANGGARAN') !== false) {
-                    $data['year'] = $line;
-                } elseif (strpos($line, 'Jenis APBDes') !== false) {
-                    $parts = explode(':', $line);
-                    $data['type'] = trim($parts[1] ?? 'APBDes Awal');
-                }
-                // --- Logika Parsing Header Dinamis ---
-                elseif (stripos($line, 'Bidang') !== false && stripos($line, 'Sub') === false) {
-                    $parts = preg_split('/:\s*/', $line, 2);
-                    if (isset($parts[1]) && !empty(trim($parts[1]))) $data['bidang'] = trim($parts[1]);
-                    else $lastKey = 'bidang';
-                } elseif (stripos($line, 'Sub Bidang') !== false) {
-                    $parts = preg_split('/:\s*/', $line, 2);
-                    if (isset($parts[1]) && !empty(trim($parts[1]))) $data['sub_bidang'] = trim($parts[1]);
-                    else $lastKey = 'sub_bidang';
-                } elseif (stripos($line, 'Kegiatan') !== false) {
-                    $parts = preg_split('/:\s*/', $line, 2);
-                    if (isset($parts[1]) && !empty(trim($parts[1]))) $data['kegiatan'] = trim($parts[1]);
-                    else $lastKey = 'kegiatan';
-                } elseif (stripos($line, 'Waktu Pel') !== false) {
-                    $parts = preg_split('/:\s*/', $line, 2);
-                    if (isset($parts[1]) && !empty(trim($parts[1]))) $data['waktu_pelaksanaan'] = trim($parts[1]);
-                    else $lastKey = 'waktu_pelaksanaan';
-                } elseif (stripos($line, 'Output') !== false || stripos($line, 'Keluaran') !== false) {
-                     $parts = preg_split('/:\s*/', $line, 2);
-                    if (isset($parts[1]) && !empty(trim($parts[1]))) $data['output'] = trim($parts[1]);
-                    else $lastKey = 'output';
-                }
-                // Jika $lastKey sudah di-set, baris ini adalah nilainya
-                elseif ($lastKey !== null) {
-                    $data[$lastKey] = $line;
-                    $lastKey = null; // Reset setelah mendapatkan nilai
-                }
+                // --- Parsing Header ---
+                if (strpos($line, 'PEMERINTAH DESA') !== false) $data['organization'] = $line;
+                elseif (strpos($line, 'TAHUN ANGGARAN') !== false) $data['year'] = $line;
+                else {
+                    $parts = explode(':', $line, 2);
+                    if (count($parts) === 2) {
+                        $key = strtolower(trim($parts[0]));
+                        $value = trim($parts[1]);
 
+                        if (strpos($key, 'jenis apbdes') !== false) $data['type'] = $value;
+                        elseif (strpos($key, 'bidang') !== false && strpos($key, 'sub') === false) $data['bidang'] = $value;
+                        elseif (strpos($key, 'sub bidang') !== false) $data['sub_bidang'] = $value;
+                        elseif (strpos($key, 'kegiatan') !== false) $data['kegiatan'] = $value;
+                        elseif (strpos($key, 'waktu pel') !== false) $data['waktu_pelaksanaan'] = $value;
+                        elseif (strpos($key, 'output') !== false || strpos($key, 'keluaran') !== false) $data['output'] = $value;
+                    }
+                }
             } else {
-                // --- Logika Parsing Item Tabel ---
+                // --- Parsing Tabel Item (Logika Baru) ---
 
-                // Hapus noise OCR
-                $cleanedLine = preg_replace('/\s+(DDS|pps|\|)\s+/', ' ', $line);
+                // Pola 1: Baris Rincian (diakhiri 2 angka: Harga Satuan, Jumlah)
+                if (preg_match('/^(.*?)\s+([\d.,]+)\s+([\d.,]+)$/', $line, $matches)) {
+                    $frontPart = trim($matches[1]);
+                    $unitPrice = $this->cleanNumber($matches[2]);
+                    $amount = $this->cleanNumber($matches[3]);
+                    
+                    // Sekarang parse bagian depan untuk kode, uraian, dan volume
+                    if (preg_match('/^(\d{2}\.|\d+\.)\s+(.*?)\s+((?:\d[\d\s.,]*)\s*[\w\s()x]+)$/', $frontPart, $frontMatches)) {
+                        $code = trim($frontMatches[1]);
+                        $description = trim(str_replace(['DDS', 'pps', '|'], '', $frontMatches[2]));
+                        $volume = trim(str_replace(['DDS', 'pps', '|'], '', $frontMatches[3]));
 
-                // Pola 1: Baris rincian lengkap (Kode, Uraian, Volume, Harga Satuan, Jumlah)
-                // Contoh: 01. Buku folio besar 9 buah 20.000,00 180.000,00
-                // Contoh: 01. Honor kader... (13 org x 12 bulan) 156 OK 50.000,00 7.800.000,00
-                if (preg_match('/^(\d{2}\.|\d+\.)\s+(.*?)\s+([\d,]+\s+\w+.*?)\s+([\d.,]+)\s+([\d.,]+)$/', $line, $matches)) {
-                    $data['items'][] = [
-                        'code' => trim($matches[1]),
-                        'description' => trim($matches[2]),
-                        'volume' => trim($matches[3]),
-                        'unit_price' => str_replace(['.', ','], ['', '.'], $matches[4]),
-                        'amount' => str_replace(['.', ','], ['', '.'], $matches[5])
-                    ];
-                }
-                // Pola 2: Baris Kategori/Sub-total (Kode, Uraian, Jumlah)
-                // Contoh: 5.2.1. Belanja Barang Perlengkapan 64.822.600,00
-                elseif (preg_match('/^([\d\.]+\.?) \s+ (.*?) \s+ ([\d.,]+)$/', $line, $matches)) {
-                    $description = trim($matches[2]);
-                    // Jangan masukkan baris header tabel lagi
-                    if ($description === 'URAIAN') continue;
+                        $data['items'][] = [
+                            'code' => $code,
+                            'description' => $description,
+                            'volume' => $volume,
+                            'unit_price' => $unitPrice,
+                            'amount' => $amount
+                        ];
+                    }
+                // Pola 2: Baris Kategori (diakhiri 1 angka: Jumlah)
+                } elseif (preg_match('/^(.*?)\s+([\d.,]+)$/', $line, $matches)) {
+                     $frontPart = trim($matches[1]);
+                     $amount = $this->cleanNumber($matches[2]);
 
-                    $data['items'][] = [
-                        'code' => trim($matches[1]),
-                        'description' => $description,
-                        'volume' => '',
-                        'unit_price' => '',
-                        'amount' => str_replace(['.', ','], ['', '.'], $matches[3])
-                    ];
+                     // Parse bagian depan untuk kode dan uraian
+                     if (preg_match('/^([\d\.]+\.?)\s+(.*)$/', $frontPart, $frontMatches)) {
+                         $code = trim($frontMatches[1]);
+                         $description = trim($frontMatches[2]);
+
+                         // Hindari memasukkan header tabel
+                         if (in_array(strtoupper($description), ['URAIAN', 'JUMLAH (RP)'])) continue;
+
+                         $data['items'][] = [
+                             'code' => $code,
+                             'description' => $description,
+                             'volume' => '',
+                             'unit_price' => '',
+                             'amount' => $amount
+                         ];
+                     }
                 }
             }
         }
-        
         return $data;
     }
-    
+
     private function createExcelFile($data)
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         
-        // Set column widths agar sesuai dengan format yang diinginkan
-        $sheet->getColumnDimension('A')->setWidth(12); // Kode
-        $sheet->getColumnDimension('B')->setWidth(55); // Uraian
-        $sheet->getColumnDimension('C')->setWidth(20); // Volume
-        $sheet->getColumnDimension('D')->setWidth(20); // Harga Satuan
-        $sheet->getColumnDimension('E')->setWidth(20); // Jumlah
+        $sheet->getColumnDimension('A')->setWidth(12);
+        $sheet->getColumnDimension('B')->setWidth(55);
+        $sheet->getColumnDimension('C')->setWidth(20);
+        $sheet->getColumnDimension('D')->setWidth(20);
+        $sheet->getColumnDimension('E')->setWidth(20);
         
         // --- Header Utama ---
         $row = 1;
@@ -172,55 +172,60 @@ class ExcelExportController extends Controller
         $sheet->mergeCells('A'.$row.':E'.$row)->setCellValue('A'.$row, $data['year']);
         $sheet->getStyle('A'.$row)->getFont()->setBold(true);
         $sheet->getStyle('A'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $row++;
+        $row+=2;
         
-        // --- Informasi Kegiatan ---
-        $row++; // Spasi
+        // --- Informasi Kegiatan (Layout Sesuai Contoh Awal) ---
         $infoStartRow = $row;
         $sheet->setCellValue('A'.$row, 'Jenis APBDes');
-        $sheet->setCellValue('B'.$row, ': ' . $data['type']);
-        $sheet->mergeCells('B'.$row.':E'.$row);
-        $row+=2; // Spasi
+        $sheet->setCellValue('B'.$row, ':');
+        $sheet->setCellValue('C'.$row, $data['type']);
+        $sheet->mergeCells('C'.$row.':E'.$row);
+        $row+=2;
         
         $sheet->setCellValue('A'.$row, 'Bidang');
-        $sheet->setCellValue('B'.$row, ': ' . $data['bidang']);
-        $sheet->mergeCells('B'.$row.':E'.$row);
+        $sheet->setCellValue('B'.$row, ':');
+        $sheet->setCellValue('C'.$row, $data['bidang']);
+        $sheet->mergeCells('C'.$row.':E'.$row);
         $row++;
         
         $sheet->setCellValue('A'.$row, 'Sub Bidang');
-        $sheet->setCellValue('B'.$row, ': ' . $data['sub_bidang']);
-        $sheet->mergeCells('B'.$row.':E'.$row);
+        $sheet->setCellValue('B'.$row, ':');
+        $sheet->setCellValue('C'.$row, $data['sub_bidang']);
+        $sheet->mergeCells('C'.$row.':E'.$row);
         $row++;
         
         $sheet->setCellValue('A'.$row, 'Kegiatan');
-        $sheet->setCellValue('B'.$row, ': ' . $data['kegiatan']);
-        $sheet->mergeCells('B'.$row.':E'.$row);
+        $sheet->setCellValue('B'.$row, ':');
+        $sheet->setCellValue('C'.$row, $data['kegiatan']);
+        $sheet->mergeCells('C'.$row.':E'.$row);
         $row++;
         
         $sheet->setCellValue('A'.$row, 'Waktu Pelaksanaan');
-        $sheet->setCellValue('B'.$row, ': ' . $data['waktu_pelaksanaan']);
-        $sheet->mergeCells('B'.$row.':E'.$row);
+        $sheet->setCellValue('B'.$row, ':');
+        $sheet->setCellValue('C'.$row, $data['waktu_pelaksanaan']);
+        $sheet->mergeCells('C'.$row.':E'.$row);
         $row++;
         
         $sheet->setCellValue('A'.$row, 'Output/Keluaran');
-        $sheet->setCellValue('B'.$row, ': ' . $data['output']);
-        $sheet->mergeCells('B'.$row.':E'.$row);
+        $sheet->setCellValue('B'.$row, ':');
+        $sheet->setCellValue('C'.$row, $data['output']);
+        $sheet->mergeCells('C'.$row.':E'.$row);
         $row++;
         
-        // Border untuk seksi informasi
-        $infoRange = 'A' . $infoStartRow . ':E' . ($row - 1);
-        $styleArray = ['borders' => ['outline' => ['borderStyle' => Border::BORDER_MEDIUM,],],];
-        $sheet->getStyle($infoRange)->applyFromArray($styleArray);
+        $sheet->getStyle('A'.$infoStartRow.':E'.($row-1))->getBorders()->getOutline()->setBorderStyle(Border::BORDER_MEDIUM);
         $row++;
 
         // --- Header Tabel Data ---
         $tableStartRow = $row;
+        // Styles
         $headerStyle = [
             'font' => ['bold' => true],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN,],]
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
         ];
-        
+        $numberStyle = ['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]];
+
+        // Content
         $sheet->mergeCells('C'.$row.':E'.$row)->setCellValue('C'.$row, 'ANGGARAN');
         $sheet->setCellValue('A'.$row, 'KODE')->mergeCells('A'.$row.':A'.($row+1));
         $sheet->setCellValue('B'.$row, 'URAIAN')->mergeCells('B'.$row.':B'.($row+1));
@@ -230,33 +235,18 @@ class ExcelExportController extends Controller
         $sheet->setCellValue('E'.$row, 'JUMLAH');
         $sheet->getStyle('A'.$tableStartRow.':E'.$row)->applyFromArray($headerStyle);
         $row++;
-
-        $sheet->setCellValue('A'.$row, '1');
-        $sheet->setCellValue('B'.$row, '2');
-        $sheet->setCellValue('C'.$row, '3');
-        $sheet->setCellValue('D'.$row, '4');
-        $sheet->setCellValue('E'.$row, '5');
-        $sheet->getStyle('A'.$row.':E'.$row)->applyFromArray($headerStyle);
+        $sheet->setCellValue('A'.$row, '1')->setCellValue('B'.$row, '2')->setCellValue('C'.$row, '3')->setCellValue('D'.$row, '4')->setCellValue('E'.$row, '5');
+        $sheet->getStyle('A'.$row.':E'.$row)->applyFromArray($numberStyle)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $row++;
 
         // --- Isi Tabel Data ---
-        $itemStyle = ['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN,],],];
-        
         foreach ($data['items'] as $item) {
             $isCategory = empty($item['volume']) && empty($item['unit_price']);
             
             $sheet->setCellValue('A' . $row, $item['code']);
-            
-            // Indentasi untuk rincian item (kode dimulai dengan '01.', '02.', dst.)
-            if (preg_match('/^\d{2}\./', $item['code'])) {
-                 $sheet->setCellValue('B' . $row, '  ' . $item['description']); // Tambah 2 spasi
-            } else {
-                 $sheet->setCellValue('B' . $row, $item['description']);
-            }
-           
+            $sheet->setCellValue('B' . $row, $item['description']);
             $sheet->setCellValue('C' . $row, $item['volume']);
             
-            // Formatting Angka
             if (!empty($item['unit_price'])) {
                 $sheet->setCellValue('D' . $row, (float)$item['unit_price']);
                 $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
@@ -267,13 +257,18 @@ class ExcelExportController extends Controller
             }
             
             // Styling
-            $sheet->getStyle('A'.$row.':E'.$row)->applyFromArray($itemStyle);
-            $sheet->getStyle('A'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle('A'.$row.':E'.$row)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
             $sheet->getStyle('B'.$row)->getAlignment()->setWrapText(true);
-            $sheet->getStyle('C'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-            $sheet->getStyle('D'.$row.':E'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             
-            // Bold untuk kategori
+            // Bold & Indentasi
+            $codePrefix = explode('.', $item['code'])[0];
+            $level = substr_count($item['code'], '.');
+            if (strlen($codePrefix) > 1 && $level > 1) { // Kode seperti 5.2.1.01
+                $sheet->getStyle('B'.$row)->getAlignment()->setIndent(2);
+            } elseif(preg_match('/^\d{2}\./', $item['code'])) { // Kode seperti 01., 02.
+                 $sheet->getStyle('B'.$row)->getAlignment()->setIndent(4);
+            }
+            
             if ($isCategory) {
                 $sheet->getStyle('A'.$row.':E'.$row)->getFont()->setBold(true);
             }
@@ -281,9 +276,7 @@ class ExcelExportController extends Controller
             $row++;
         }
         
-        // Border luar untuk seluruh tabel
-        $tableRange = 'A' . $tableStartRow . ':E' . ($row - 1);
-        $sheet->getStyle($tableRange)->getBorders()->getOutline()->setBorderStyle(Border::BORDER_MEDIUM);
+        $sheet->getStyle('A'.$tableStartRow.':E'.($row-1))->getBorders()->getOutline()->setBorderStyle(Border::BORDER_MEDIUM);
         
         return $spreadsheet;
     }
