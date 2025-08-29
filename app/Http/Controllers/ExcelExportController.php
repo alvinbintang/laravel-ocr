@@ -200,8 +200,8 @@ class ExcelExportController extends Controller
             $sheet->setCellValue('A' . $row, $item['code']);
             $sheet->setCellValue('B' . $row, $item['description']);
             $sheet->setCellValue('C' . $row, $item['volume']);
-            $sheet->setCellValue('D' . $row, number_format($item['unit_price'], 2, ',', '.'));
-            $sheet->setCellValue('E' . $row, number_format($item['amount'], 2, ',', '.'));
+            $sheet->setCellValue('D' . $row, is_numeric($item['unit_price']) ? number_format($item['unit_price'], 2, ',', '.') : $item['unit_price']);
+            $sheet->setCellValue('E' . $row, is_numeric($item['amount']) ? number_format($item['amount'], 2, ',', '.') : $item['amount']);
             
             // Style data rows
             $dataRange = 'A' . $row . ':E' . $row;
@@ -213,7 +213,7 @@ class ExcelExportController extends Controller
         // Total row
         $sheet->setCellValue('A' . $row, 'TOTAL');
         $sheet->mergeCells('A' . $row . ':D' . $row);
-        $sheet->setCellValue('E' . $row, number_format($data['total_amount'], 2, ',', '.'));
+        $sheet->setCellValue('E' . $row, is_numeric($data['total_amount']) ? number_format($data['total_amount'], 2, ',', '.') : $data['total_amount']);
         
         $totalRange = 'A' . $row . ':E' . $row;
         $sheet->getStyle($totalRange)->getFont()->setBold(true);
