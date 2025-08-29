@@ -54,7 +54,7 @@ class ProcessOcr implements ShouldQueue
                     ->lang('ind+eng')
                     ->run();
 
-                $resultText .= "=== Halaman ===\n".\$text."\n\n";
+                $resultText .= "=== Halaman ===\n".$text."\n\n";
             }
 
             $ocrResult->update(['text' => $resultText, 'status' => 'done']);
