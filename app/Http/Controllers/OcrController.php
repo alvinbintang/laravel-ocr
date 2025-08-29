@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessOcr; // ADDED
+use App\Models\OcrResult; // ADDED
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use thiagoalessio\TesseractOCR\TesseractOCR;
-use Symfony\Component\Process\Process;
 
 class OcrController extends Controller
 {
@@ -20,35 +20,24 @@ class OcrController extends Controller
             'pdf' => 'required|mimes:pdf|max:20480', // max 20MB
         ]);
 
-        // 1. Simpan PDF
+        // Simpan PDF
         $path = $request->file('pdf')->store('ocr');
-        $pdfPath = Storage::path($path);
 
-        // 2. Konversi PDF ke Image (per halaman)
-        $outputPrefix = Storage::path('ocr/tmp_'.uniqid());
-        $process = new Process(['pdftoppm', '-png', $pdfPath, $outputPrefix]);
-        $process->run();
-
-        if (!$process->isSuccessful()) {
-            return response()->json(['error' => $process->getErrorOutput()], 500);
-        }
-
-        // 3. Ambil semua gambar hasil konversi
-        $files = glob($outputPrefix.'-*.png');
-        $resultText = '';
-
-        // 4. OCR setiap gambar
-        foreach ($files as $img) {
-            $text = (new TesseractOCR($img))
-                ->lang('ind+eng') // bahasa Indonesia + Inggris
-                ->run();
-
-            $resultText .= "=== Halaman ===\n".$text."\n\n";
-        }
-
-        // 5. Return hasil teks
-        return view('ocr.result', [
-            'text' => $resultText
+        // Simpan informasi ke database
+        $ocrResult = OcrResult::create([
+            'filename' => basename($path),
+            'status' => 'pending',
         ]);
+
+        // Dispatch job ke antrian
+        ProcessOcr::dispatch($ocrResult->id, Storage::path($path));
+
+        return redirect()->route('ocr.result', ['id' => $ocrResult->id])->with('success', 'File Anda sedang diproses. Silakan cek hasilnya sebentar lagi.');
+    }
+
+    public function showResult($id)
+    {
+        $ocrResult = OcrResult::findOrFail($id);
+        return view('ocr.result', ['ocrResult' => $ocrResult]);
     }
 }
