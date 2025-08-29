@@ -15,6 +15,7 @@ use Symfony\Component\Process\Process; // ADDED
 class ProcessOcr implements ShouldQueue
 {
     use Queueable;
+    use Dispatchable; // ADDED
 
     /**
      * Create a new job instance.
