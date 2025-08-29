@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OCR Result</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"> <!-- ADDED -->
 </head>
 <body>
     <div class="container mt-5">
@@ -21,6 +22,11 @@
                         @elseif ($ocrResult->status == 'done')
                             <h5>Extracted Text:</h5>
                             <pre class="bg-light p-3 rounded">{{ $ocrResult->text }}</pre>
+                            <div class="mt-3">
+                                <a href="{{ route('ocr.export', ['id' => $ocrResult->id]) }}" class="btn btn-success me-2">
+                                    <i class="fas fa-file-excel"></i> Export to Excel
+                                </a>
+                            </div>
                         @elseif ($ocrResult->status == 'error')
                             <div class="alert alert-danger" role="alert">
                                 Terjadi kesalahan saat memproses file: {{ $ocrResult->text }}
