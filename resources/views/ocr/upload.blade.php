@@ -40,6 +40,46 @@
                         </form>
                     </div>
                 </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">Daftar File yang Diproses</div>
+                    <div class="card-body">
+                        @if ($ocrResults->isEmpty())
+                            <p>Belum ada file yang diproses.</p>
+                        @else
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Nama File</th>
+                                        <th>Status</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($ocrResults as $result)
+                                        <tr>
+                                            <td>{{ $result->filename }}</td>
+                                            <td>
+                                                @if ($result->status == 'pending')
+                                                    <span class="badge bg-warning">Pending</span>
+                                                @elseif ($result->status == 'processing')
+                                                    <span class="badge bg-info">Processing</span>
+                                                @elseif ($result->status == 'done')
+                                                    <span class="badge bg-success">Done</span>
+                                                @else
+                                                    <span class="badge bg-danger">Error</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                <a href="{{ route('ocr.result', ['id' => $result->id]) }}" class="btn btn-sm btn-primary">Lihat Hasil</a>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        @endif
+                    </div>
+                </div>
             </div>
         </div>
     </div>

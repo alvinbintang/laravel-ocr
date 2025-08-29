@@ -11,7 +11,8 @@ class OcrController extends Controller
 {
     public function index()
     {
-        return view('ocr.upload');
+        $ocrResults = OcrResult::orderBy('created_at', 'desc')->get(); // ADDED
+        return view('ocr.upload', ['ocrResults' => $ocrResults]); // UPDATED
     }
 
     public function extract(Request $request)
