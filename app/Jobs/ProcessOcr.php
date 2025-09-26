@@ -2,24 +2,19 @@
 
 namespace App\Jobs;
 
-use App\Models\OcrResult; // ADDED
+use App\Models\OcrResult;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Storage; // ADDED
-use thiagoalessio\TesseractOCR\TesseractOCR; // ADDED
-use Symfony\Component\Process\Process; // ADDED
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\Process\Process;
 
 class ProcessOcr implements ShouldQueue
 {
-    use Queueable;
-    use Dispatchable; // ADDED
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    /**
-     * Create a new job instance.
-     */
     protected $ocrResultId;
     protected $pdfPath;
 
@@ -39,7 +34,7 @@ class ProcessOcr implements ShouldQueue
         $ocrResult->update(['status' => 'processing']);
 
         try {
-            $outputPrefix = Storage::path('ocr/tmp_'.uniqid());
+            $outputPrefix = Storage::path('ocr/img_' . uniqid());
             $process = new Process(['pdftoppm', '-png', $this->pdfPath, $outputPrefix]);
             $process->run();
 
@@ -47,26 +42,36 @@ class ProcessOcr implements ShouldQueue
                 throw new \Exception($process->getErrorOutput());
             }
 
-            $files = glob($outputPrefix.'-*.png');
-            $resultText = '';
-
-            foreach ($files as $img) {
-                $text = (new TesseractOCR($img))
-                    ->lang('ind+eng')
-                    ->run();
-
-                $resultText .= "=== Halaman ===\n".$text."\n\n";
+            // Get the generated image files
+            $files = glob($outputPrefix . '-*.png');
+            
+            if (empty($files)) {
+                throw new \Exception('No images were generated from the PDF');
             }
 
-            $ocrResult->update(['text' => $resultText, 'status' => 'done']);
-
-            foreach ($files as $img) {
-                unlink($img);
+            // For now, we'll just use the first page
+            $imagePath = 'ocr/' . basename($files[0]);
+            Storage::move(str_replace(Storage::path(''), '', $files[0]), $imagePath);
+            
+            // Clean up other pages if they exist
+            foreach (array_slice($files, 1) as $file) {
+                unlink($file);
             }
+
+            // Update database with image path
+            $ocrResult->update([
+                'status' => 'awaiting_selection',
+                'image_path' => $imagePath
+            ]);
+
+            // Delete the original PDF
             Storage::delete(str_replace(Storage::path(''), '', $this->pdfPath));
 
         } catch (\Exception $e) {
-            $ocrResult->update(['status' => 'error', 'text' => $e->getMessage()]);
+            $ocrResult->update([
+                'status' => 'error',
+                'ocr_results' => json_encode(['error' => $e->getMessage()])
+            ]);
         }
     }
 }
