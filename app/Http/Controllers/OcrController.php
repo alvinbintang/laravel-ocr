@@ -77,7 +77,7 @@ class OcrController extends Controller
         try {
             $request->validate([
                 'regions' => 'required|array',
-                'regions.*.id' => 'required|string',
+                'regions.*.id' => 'required|integer',
                 'regions.*.x' => 'required|numeric',
                 'regions.*.y' => 'required|numeric',
                 'regions.*.width' => 'required|numeric',
