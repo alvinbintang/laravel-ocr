@@ -66,17 +66,19 @@ class OcrController extends Controller
     {
         $request->validate([
             'regions' => 'required|array',
-            'regions.*.id' => 'required|integer',
+            'regions.*.id' => 'required|string',
             'regions.*.x' => 'required|numeric',
             'regions.*.y' => 'required|numeric',
             'regions.*.width' => 'required|numeric',
             'regions.*.height' => 'required|numeric',
+            'current_page' => 'sometimes|integer|min:1', // ADDED: Validate current page
         ]);
 
         $ocrResult = OcrResult::findOrFail($id);
         
-        // Dispatch job untuk memproses region yang dipilih
-        ProcessRegions::dispatch($ocrResult->id, $request->regions);
+        // UPDATED: Dispatch job with current page parameter
+        $currentPage = $request->input('current_page', 1);
+        ProcessRegions::dispatch($ocrResult->id, $request->regions, $currentPage);
 
         return response()->json([
             'message' => 'Processing selected regions',

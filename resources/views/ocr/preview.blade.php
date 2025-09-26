@@ -48,6 +48,32 @@
                     </div>
 
                     <div class="border-t border-gray-200 pt-4">
+                        <!-- ADDED: Page Navigation -->
+                        @if($ocrResult->page_count > 1)
+                        <div class="mb-4 p-4 bg-blue-50 rounded-lg">
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-lg font-semibold text-blue-800">Navigasi Halaman</h3>
+                                <span class="text-sm text-blue-600">
+                                    Halaman <span id="current-page">1</span> dari {{ $ocrResult->page_count }}
+                                </span>
+                            </div>
+                            <div class="flex items-center space-x-2 mt-3">
+                                <button id="prev-page" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded disabled:bg-gray-300 disabled:cursor-not-allowed" disabled>
+                                    <i class="fas fa-chevron-left"></i> Sebelumnya
+                                </button>
+                                <div class="flex space-x-1" id="page-indicators">
+                                    @for($i = 1; $i <= $ocrResult->page_count; $i++)
+                                    <button class="page-btn px-3 py-1 rounded {{ $i == 1 ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300' }}" 
+                                            data-page="{{ $i }}">{{ $i }}</button>
+                                    @endfor
+                                </div>
+                                <button id="next-page" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded disabled:bg-gray-300 disabled:cursor-not-allowed" {{ $ocrResult->page_count <= 1 ? 'disabled' : '' }}>
+                                    Selanjutnya <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                        @endif
+
                         <div class="flex space-x-4 mb-4">
                             <button id="add-region" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
                                 <i class="fas fa-plus mr-2"></i> Tambah Area
@@ -140,17 +166,80 @@
 
 .region-resize-handle {
     position: absolute;
-    width: 10px;
-    height: 10px;
-    background-color: white;
-    border: 2px solid #3B82F6;
-    border-radius: 50%;
+    background-color: #3B82F6;
+    border: 1px solid #ffffff;
+    border-radius: 2px;
+    z-index: 10;
 }
 
-.region-resize-handle.nw { top: -5px; left: -5px; cursor: nw-resize; }
-.region-resize-handle.ne { top: -5px; right: -5px; cursor: ne-resize; }
-.region-resize-handle.sw { bottom: -5px; left: -5px; cursor: sw-resize; }
-.region-resize-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
+/* UPDATED: Enhanced resize handles with better positioning and sizing */
+.region-resize-handle.nw {
+    top: -4px;
+    left: -4px;
+    width: 8px;
+    height: 8px;
+    cursor: nw-resize;
+}
+
+.region-resize-handle.n {
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    cursor: n-resize;
+}
+
+.region-resize-handle.ne {
+    top: -4px;
+    right: -4px;
+    width: 8px;
+    height: 8px;
+    cursor: ne-resize;
+}
+
+.region-resize-handle.w {
+    top: 50%;
+    left: -4px;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    cursor: w-resize;
+}
+
+.region-resize-handle.e {
+    top: 50%;
+    right: -4px;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    cursor: e-resize;
+}
+
+.region-resize-handle.sw {
+    bottom: -4px;
+    left: -4px;
+    width: 8px;
+    height: 8px;
+    cursor: sw-resize;
+}
+
+.region-resize-handle.s {
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    cursor: s-resize;
+}
+
+.region-resize-handle.se {
+    bottom: -4px;
+    right: -4px;
+    width: 8px;
+    height: 8px;
+    cursor: se-resize;
+}
 
 .loading-overlay {
     position: fixed;
@@ -212,8 +301,8 @@ class Region {
         `;
         this.element.appendChild(controls);
 
-        // Add resize handles
-        ['nw', 'ne', 'sw', 'se'].forEach(pos => {
+        // Add resize handles - UPDATED: More handles for better control
+        ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'].forEach(pos => {
             const handle = document.createElement('div');
             handle.className = `region-resize-handle ${pos}`;
             handle.dataset.handle = pos;
@@ -284,12 +373,16 @@ class Region {
         let newLeft = startLeft + dx;
         let newTop = startTop + dy;
 
-        // Constrain to container bounds
-        newLeft = Math.max(0, Math.min(newLeft, containerRect.width - regionRect.width));
-        newTop = Math.max(0, Math.min(newTop, containerRect.height - regionRect.height));
+        // UPDATED: Enhanced boundary constraints with smoother movement
+        const margin = 5; // Small margin for better UX
+        newLeft = Math.max(-margin, Math.min(newLeft, containerRect.width - regionRect.width + margin));
+        newTop = Math.max(-margin, Math.min(newTop, containerRect.height - regionRect.height + margin));
 
         this.element.style.left = `${newLeft}px`;
         this.element.style.top = `${newTop}px`;
+        
+        // ADDED: Update list item in real-time during drag
+        this.updateListItem();
     }
 
     resize(handle, dx, dy, startWidth, startHeight, startLeft, startTop) {
@@ -299,6 +392,7 @@ class Region {
         let newLeft = startLeft;
         let newTop = startTop;
 
+        // UPDATED: Enhanced resize logic with more handles
         switch (handle) {
             case 'se':
                 newWidth = startWidth + dx;
@@ -320,10 +414,24 @@ class Region {
                 newLeft = startLeft + dx;
                 newTop = startTop + dy;
                 break;
+            case 'n':
+                newHeight = startHeight - dy;
+                newTop = startTop + dy;
+                break;
+            case 's':
+                newHeight = startHeight + dy;
+                break;
+            case 'w':
+                newWidth = startWidth - dx;
+                newLeft = startLeft + dx;
+                break;
+            case 'e':
+                newWidth = startWidth + dx;
+                break;
         }
 
         // Enforce minimum size
-        const minSize = 50;
+        const minSize = 30; // UPDATED: Smaller minimum size for more flexibility
         if (newWidth >= minSize && newHeight >= minSize) {
             // Constrain to container bounds
             if (newLeft >= 0 && newLeft + newWidth <= containerRect.width &&
@@ -448,6 +556,9 @@ class RegionManager {
             };
         });
 
+        // ADDED: Get current page from PageNavigator
+        const currentPage = window.pageNavigator ? window.pageNavigator.currentPage : 1;
+
         // Show loading overlay
         const loadingOverlay = document.createElement('div');
         loadingOverlay.className = 'loading-overlay';
@@ -461,7 +572,10 @@ class RegionManager {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 },
-                body: JSON.stringify({ regions: regionsData })
+                body: JSON.stringify({ 
+                    regions: regionsData,
+                    current_page: currentPage // ADDED: Send current page
+                })
             });
 
             const data = await response.json();
@@ -510,18 +624,41 @@ class RegionManager {
         const resultsContainer = document.getElementById('ocr-results');
         
         resultsContainer.innerHTML = '';
+        
+        // UPDATED: Group results by page for better organization
+        const resultsByPage = {};
         results.forEach(result => {
-            const resultDiv = document.createElement('div');
-            resultDiv.className = 'mb-4 p-4 bg-white rounded shadow';
-            resultDiv.innerHTML = `
-                <div class="font-medium mb-2">Area ${result.region_id}</div>
-                <div class="text-sm text-gray-600">
-                    Koordinat: (${result.coordinates.x}, ${result.coordinates.y})
-                    Ukuran: ${result.coordinates.width}×${result.coordinates.height}
-                </div>
-                <pre class="mt-2 p-2 bg-gray-50 rounded">${result.text}</pre>
-            `;
-            resultsContainer.appendChild(resultDiv);
+            const page = result.page || 1;
+            if (!resultsByPage[page]) {
+                resultsByPage[page] = [];
+            }
+            resultsByPage[page].push(result);
+        });
+
+        // Display results grouped by page
+        Object.keys(resultsByPage).sort((a, b) => parseInt(a) - parseInt(b)).forEach(page => {
+            if (Object.keys(resultsByPage).length > 1) {
+                // ADDED: Page header for multi-page results
+                const pageHeader = document.createElement('div');
+                pageHeader.className = 'mb-3 p-2 bg-blue-100 rounded font-semibold text-blue-800';
+                pageHeader.textContent = `Halaman ${page}`;
+                resultsContainer.appendChild(pageHeader);
+            }
+
+            resultsByPage[page].forEach(result => {
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'mb-4 p-4 bg-white rounded shadow';
+                resultDiv.innerHTML = `
+                    <div class="font-medium mb-2">Area ${result.region_id}</div>
+                    <div class="text-sm text-gray-600">
+                        Koordinat: (${result.coordinates.x}, ${result.coordinates.y})
+                        Ukuran: ${result.coordinates.width}×${result.coordinates.height}
+                        ${result.page ? `| Halaman: ${result.page}` : ''}
+                    </div>
+                    <pre class="mt-2 p-2 bg-gray-50 rounded">${result.text}</pre>
+                `;
+                resultsContainer.appendChild(resultDiv);
+            });
         });
 
         resultsSection.classList.remove('hidden');
@@ -532,7 +669,93 @@ class RegionManager {
 // Initialize when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     RegionManager.initialize();
+    
+    // ADDED: Initialize page navigation
+    PageNavigator.initialize();
 });
+
+// ADDED: Page Navigation Manager
+class PageNavigator {
+    static currentPage = 1;
+    static totalPages = {{ $ocrResult->page_count ?? 1 }};
+    static imagePaths = @json($ocrResult->image_paths ?? []);
+
+    static initialize() {
+        if (this.totalPages <= 1) return;
+
+        // Add event listeners for navigation buttons
+        document.getElementById('prev-page')?.addEventListener('click', () => this.goToPreviousPage());
+        document.getElementById('next-page')?.addEventListener('click', () => this.goToNextPage());
+        
+        // Add event listeners for page buttons
+        document.querySelectorAll('.page-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const page = parseInt(e.target.dataset.page);
+                this.goToPage(page);
+            });
+        });
+    }
+
+    static goToPage(pageNumber) {
+        if (pageNumber < 1 || pageNumber > this.totalPages) return;
+        
+        this.currentPage = pageNumber;
+        this.updateImage();
+        this.updateUI();
+        this.clearRegions();
+    }
+
+    static goToPreviousPage() {
+        if (this.currentPage > 1) {
+            this.goToPage(this.currentPage - 1);
+        }
+    }
+
+    static goToNextPage() {
+        if (this.currentPage < this.totalPages) {
+            this.goToPage(this.currentPage + 1);
+        }
+    }
+
+    static updateImage() {
+        const sourceImage = document.getElementById('source-image');
+        if (sourceImage && this.imagePaths[this.currentPage - 1]) {
+            sourceImage.src = '{{ asset("storage/") }}/' + this.imagePaths[this.currentPage - 1];
+        }
+    }
+
+    static updateUI() {
+        // Update current page indicator
+        document.getElementById('current-page').textContent = this.currentPage;
+        
+        // Update navigation buttons
+        const prevBtn = document.getElementById('prev-page');
+        const nextBtn = document.getElementById('next-page');
+        
+        if (prevBtn) {
+            prevBtn.disabled = this.currentPage <= 1;
+        }
+        
+        if (nextBtn) {
+            nextBtn.disabled = this.currentPage >= this.totalPages;
+        }
+        
+        // Update page indicators
+        document.querySelectorAll('.page-btn').forEach(btn => {
+            const page = parseInt(btn.dataset.page);
+            if (page === this.currentPage) {
+                btn.className = 'page-btn px-3 py-1 rounded bg-blue-500 text-white';
+            } else {
+                btn.className = 'page-btn px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300';
+            }
+        });
+    }
+
+    static clearRegions() {
+        // Clear all existing regions when switching pages
+        RegionManager.clearAllRegions();
+    }
+}
 
 // Get the OCR Result ID from the page
 const ocrResultId = '{{ $ocrResult->id }}';
