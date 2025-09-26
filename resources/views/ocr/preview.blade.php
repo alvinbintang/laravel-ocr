@@ -64,10 +64,16 @@
                             <!-- Image Container -->
                             <div class="w-full md:w-3/4">
                                 <div id="image-container" class="relative border-2 border-gray-300 rounded-lg overflow-hidden">
-                                    <img src="{{ Storage::url($ocrResult->image_path) }}" 
-                                         id="source-image" 
-                                         class="max-w-full h-auto"
-                                         alt="Document Preview">
+                                    @if($ocrResult->image_path)
+                                        <img src="{{ asset('storage/' . $ocrResult->image_path) }}" 
+                                             id="source-image" 
+                                             class="max-w-full h-auto"
+                                             alt="Document Preview">
+                                    @else
+                                        <div class="flex items-center justify-center h-64 bg-gray-100">
+                                            <p class="text-gray-500">Gambar sedang diproses...</p>
+                                        </div>
+                                    @endif
                                     <div id="regions-overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
                                 </div>
                             </div>

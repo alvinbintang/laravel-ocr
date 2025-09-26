@@ -33,7 +33,7 @@ class ProcessRegions implements ShouldQueue
         }
 
         try {
-            $imagePath = Storage::path($ocrResult->image_path);
+            $imagePath = Storage::disk('public')->path($ocrResult->image_path);
             $image = Image::make($imagePath);
             $results = [];
 

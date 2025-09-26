@@ -13,5 +13,7 @@ class OcrResult extends Model
         'filename',
         'text',
         'status',
+        'image_path',
+        'ocr_results',
     ];
 }

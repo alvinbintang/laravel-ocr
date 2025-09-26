@@ -34,7 +34,11 @@ class ProcessOcr implements ShouldQueue
         $ocrResult->update(['status' => 'processing']);
 
         try {
-            $outputPrefix = Storage::path('ocr/img_' . uniqid());
+            $outputPrefix = Storage::disk('public')->path('ocr/img_' . uniqid());
+            
+            // Ensure the ocr directory exists in public storage
+            Storage::disk('public')->makeDirectory('ocr');
+            
             $process = new Process(['pdftoppm', '-png', $this->pdfPath, $outputPrefix]);
             $process->run();
 
@@ -51,7 +55,10 @@ class ProcessOcr implements ShouldQueue
 
             // For now, we'll just use the first page
             $imagePath = 'ocr/' . basename($files[0]);
-            Storage::move(str_replace(Storage::path(''), '', $files[0]), $imagePath);
+            
+            // Move the first page to public storage
+            $sourceFile = str_replace(Storage::disk('public')->path(''), '', $files[0]);
+            Storage::disk('public')->move($sourceFile, $imagePath);
             
             // Clean up other pages if they exist
             foreach (array_slice($files, 1) as $file) {
