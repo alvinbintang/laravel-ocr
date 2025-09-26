@@ -23,6 +23,7 @@ class UpdateOcrResultsTable extends Migration
             $table->text('text')->nullable();
             $table->dropColumn('ocr_results');
             $table->dropColumn('selected_regions');
+            $table->dropColumn('image_paths'); // ADDED: Drop image_paths column in rollback
             $table->dropColumn('image_path');
         });
     }
