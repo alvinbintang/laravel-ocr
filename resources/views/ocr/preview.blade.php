@@ -610,7 +610,7 @@ class RegionManager {
     }
 
     static async pollResults() {
-        const maxAttempts = 30; // 30 seconds
+        const maxAttempts = 3600; // 30 seconds
         let attempts = 0;
 
         const poll = async () => {
