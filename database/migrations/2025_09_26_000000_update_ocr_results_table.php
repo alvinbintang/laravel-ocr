@@ -10,7 +10,8 @@ class UpdateOcrResultsTable extends Migration
     {
         Schema::table('ocr_results', function (Blueprint $table) {
             $table->string('image_path')->nullable()->after('filename');
-            $table->json('selected_regions')->nullable()->after('image_path');
+            $table->json('image_paths')->nullable()->after('image_path'); // ADDED: Store multiple image paths for multi-page PDFs
+            $table->json('selected_regions')->nullable()->after('image_paths');
             $table->json('ocr_results')->nullable()->after('text');
             $table->dropColumn('text');
         });
