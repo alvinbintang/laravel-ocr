@@ -610,7 +610,7 @@ class RegionManager {
     }
 
     static async pollResults() {
-        const maxAttempts = 3600; // 30 seconds
+        const maxAttempts = 3600; // 1 hour x 5
         let attempts = 0;
 
         const poll = async () => {
@@ -628,7 +628,7 @@ class RegionManager {
                 throw new Error('Timeout waiting for results');
             }
 
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 5000));
             return poll();
         };
 

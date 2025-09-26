@@ -10,7 +10,8 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 use thiagoalessio\TesseractOCR\TesseractOCR;
-use Intervention\Image\Facades\Image;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Gd\Driver;
 
 class ProcessRegions implements ShouldQueue
 {
@@ -41,7 +42,9 @@ class ProcessRegions implements ShouldQueue
                 throw new \Exception("Image not found for page {$this->currentPage}");
             }
 
-            $image = Image::make($imagePath);
+            // UPDATED: Create ImageManager instance with GD driver
+            $manager = new ImageManager(new Driver());
+            $image = $manager->read($imagePath);
             $results = [];
 
             foreach ($this->regions as $region) {
