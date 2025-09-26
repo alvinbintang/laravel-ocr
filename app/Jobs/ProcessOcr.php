@@ -53,22 +53,26 @@ class ProcessOcr implements ShouldQueue
                 throw new \Exception('No images were generated from the PDF');
             }
 
-            // For now, we'll just use the first page
-            $imagePath = 'ocr/' . basename($files[0]);
+            // Sort files to ensure correct page order
+            sort($files);
             
-            // Move the first page to public storage
-            $sourceFile = str_replace(Storage::disk('public')->path(''), '', $files[0]);
-            Storage::disk('public')->move($sourceFile, $imagePath);
-            
-            // Clean up other pages if they exist
-            foreach (array_slice($files, 1) as $file) {
-                unlink($file);
+            // Process all pages
+            $imagePaths = [];
+            foreach ($files as $index => $file) {
+                $imagePath = 'ocr/' . basename($file);
+                
+                // Move each page to public storage
+                $sourceFile = str_replace(Storage::disk('public')->path(''), '', $file);
+                Storage::disk('public')->move($sourceFile, $imagePath);
+                
+                $imagePaths[] = $imagePath;
             }
 
-            // Update database with image path
+            // Update database with all image paths
             $ocrResult->update([
                 'status' => 'awaiting_selection',
-                'image_path' => $imagePath
+                'image_path' => $imagePaths[0], // Keep first page as primary for backward compatibility
+                'image_paths' => json_encode($imagePaths) // Store all pages
             ]);
 
             // Delete the original PDF
