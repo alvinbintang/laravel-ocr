@@ -105,10 +105,26 @@
     document.addEventListener('DOMContentLoaded', function() {
         const checkStatus = async () => {
             try {
-                const response = await fetch('{{ route("ocr.preview", $ocrResult->id) }}');
-                if (response.redirected) {
-                    window.location.href = response.url;
-                    return;
+                // UPDATED: Check status via API instead of redirect
+                const response = await fetch(`/ocr/{{ $ocrResult->id }}/status-check`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === 'done') {
+                        // ADDED: Redirect to preview page when processing is complete
+                        window.location.href = `/ocr/{{ $ocrResult->id }}/preview`;
+                        return;
+                    } else if (data.status === 'error') {
+                        // Reload page to show error
+                        window.location.reload();
+                        return;
+                    }
                 }
             } catch (error) {
                 console.error('Error checking status:', error);

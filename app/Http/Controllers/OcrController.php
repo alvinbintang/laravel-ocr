@@ -62,28 +62,50 @@ class OcrController extends Controller
         return view('ocr.status', ['ocrResult' => $ocrResult]);
     }
 
+    // ADDED: API endpoint for status checking
+    public function statusCheck($id)
+    {
+        $ocrResult = OcrResult::findOrFail($id);
+        return response()->json([
+            'status' => $ocrResult->status,
+            'filename' => $ocrResult->filename
+        ]);
+    }
+
     public function processRegions(Request $request, $id)
     {
-        $request->validate([
-            'regions' => 'required|array',
-            'regions.*.id' => 'required|string',
-            'regions.*.x' => 'required|numeric',
-            'regions.*.y' => 'required|numeric',
-            'regions.*.width' => 'required|numeric',
-            'regions.*.height' => 'required|numeric',
-            'current_page' => 'sometimes|integer|min:1', // ADDED: Validate current page
-        ]);
+        try {
+            $request->validate([
+                'regions' => 'required|array',
+                'regions.*.id' => 'required|string',
+                'regions.*.x' => 'required|numeric',
+                'regions.*.y' => 'required|numeric',
+                'regions.*.width' => 'required|numeric',
+                'regions.*.height' => 'required|numeric',
+                'current_page' => 'sometimes|integer|min:1', // ADDED: Validate current page
+            ]);
 
-        $ocrResult = OcrResult::findOrFail($id);
-        
-        // UPDATED: Dispatch job with current page parameter
-        $currentPage = $request->input('current_page', 1);
-        ProcessRegions::dispatch($ocrResult->id, $request->regions, $currentPage);
+            $ocrResult = OcrResult::findOrFail($id);
+            
+            // UPDATED: Dispatch job with current page parameter
+            $currentPage = $request->input('current_page', 1);
+            ProcessRegions::dispatch($ocrResult->id, $request->regions, $currentPage);
 
-        return response()->json([
-            'message' => 'Processing selected regions',
-            'status' => 'processing'
-        ]);
+            return response()->json([
+                'message' => 'Processing selected regions',
+                'status' => 'processing'
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error processing regions: ' . $e->getMessage(),
+                'status' => 'error'
+            ], 500);
+        }
     }
 
     public function showResult($id)

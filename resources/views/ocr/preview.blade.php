@@ -100,7 +100,7 @@
                                             <p class="text-gray-500">Gambar sedang diproses...</p>
                                         </div>
                                     @endif
-                                    <div id="regions-overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
+                                    <div id="regions-overlay" class="absolute top-0 left-0 w-full h-full"></div>
                                 </div>
                             </div>
 
@@ -167,77 +167,84 @@
 .region-resize-handle {
     position: absolute;
     background-color: #3B82F6;
-    border: 1px solid #ffffff;
-    border-radius: 2px;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
     z-index: 10;
+    pointer-events: auto;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.region-resize-handle:hover {
+    background-color: #2563EB;
+    transform: scale(1.2);
 }
 
 /* UPDATED: Enhanced resize handles with better positioning and sizing */
 .region-resize-handle.nw {
-    top: -4px;
-    left: -4px;
-    width: 8px;
-    height: 8px;
+    top: -6px;
+    left: -6px;
+    width: 12px;
+    height: 12px;
     cursor: nw-resize;
 }
 
 .region-resize-handle.n {
-    top: -4px;
+    top: -6px;
     left: 50%;
     transform: translateX(-50%);
-    width: 8px;
-    height: 8px;
+    width: 12px;
+    height: 12px;
     cursor: n-resize;
 }
 
 .region-resize-handle.ne {
-    top: -4px;
-    right: -4px;
-    width: 8px;
-    height: 8px;
+    top: -6px;
+    right: -6px;
+    width: 12px;
+    height: 12px;
     cursor: ne-resize;
 }
 
 .region-resize-handle.w {
     top: 50%;
-    left: -4px;
+    left: -6px;
     transform: translateY(-50%);
-    width: 8px;
-    height: 8px;
+    width: 12px;
+    height: 12px;
     cursor: w-resize;
 }
 
 .region-resize-handle.e {
     top: 50%;
-    right: -4px;
+    right: -6px;
     transform: translateY(-50%);
-    width: 8px;
-    height: 8px;
+    width: 12px;
+    height: 12px;
     cursor: e-resize;
 }
 
 .region-resize-handle.sw {
-    bottom: -4px;
-    left: -4px;
-    width: 8px;
-    height: 8px;
+    bottom: -6px;
+    left: -6px;
+    width: 12px;
+    height: 12px;
     cursor: sw-resize;
 }
 
 .region-resize-handle.s {
-    bottom: -4px;
+    bottom: -6px;
     left: 50%;
     transform: translateX(-50%);
-    width: 8px;
-    height: 8px;
+    width: 12px;
+    height: 12px;
     cursor: s-resize;
 }
 
 .region-resize-handle.se {
-    bottom: -4px;
-    right: -4px;
-    width: 8px;
-    height: 8px;
+    bottom: -6px;
+    right: -6px;
+    width: 12px;
+    height: 12px;
     cursor: se-resize;
 }
 
@@ -570,13 +577,22 @@ class RegionManager {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Accept': 'application/json' // ADDED: Explicitly request JSON response
                 },
                 body: JSON.stringify({ 
                     regions: regionsData,
                     current_page: currentPage // ADDED: Send current page
                 })
             });
+
+            // ADDED: Check if response is actually JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Non-JSON response received:', text);
+                throw new Error('Server returned non-JSON response. Check server logs.');
+            }
 
             const data = await response.json();
             
