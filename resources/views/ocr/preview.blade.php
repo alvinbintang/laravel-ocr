@@ -15,7 +15,12 @@
                 <div class="flex justify-between h-16">
                     <div class="flex">
                         <div class="flex-shrink-0 flex items-center">
-                            <h1 class="text-xl font-bold text-gray-800">Laravel OCR</h1>
+                            <a href="{{ route('ocr.index') }}" class="text-xl font-bold text-gray-800">Laravel OCR</a>
+                        </div>
+                        <div class="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
+                            <a href="{{ route('ocr.index') }}" class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900">
+                                Upload
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -32,62 +37,64 @@
                 </div>
                 @endif
 
-    <div class="bg-white rounded-lg shadow-lg p-6">
-        <div class="mb-4">
-            <p class="text-gray-600 mb-2">
-                Status: <span class="font-semibold" id="status-text">{{ $ocrResult->status }}</span>
-            </p>
-            <p class="text-gray-600">
-                Nama File: <span class="font-semibold">{{ $ocrResult->filename }}</span>
-            </p>
-        </div>
-
-        <div class="border-t border-gray-200 pt-4">
-            <div class="flex space-x-4 mb-4">
-                <button id="add-region" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                    <i class="fas fa-plus mr-2"></i> Tambah Area
-                </button>
-                <button id="clear-regions" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
-                    <i class="fas fa-trash mr-2"></i> Hapus Semua Area
-                </button>
-                <button id="process-regions" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-                    <i class="fas fa-play mr-2"></i> Proses Area Terpilih
-                </button>
-            </div>
-
-            <div class="flex flex-wrap md:flex-nowrap space-y-4 md:space-y-0 md:space-x-4">
-                <!-- Image Container -->
-                <div class="w-full md:w-3/4">
-                    <div id="image-container" class="relative border-2 border-gray-300 rounded-lg overflow-hidden">
-                        <img src="{{ Storage::url($ocrResult->image_path) }}" 
-                             id="source-image" 
-                             class="max-w-full h-auto"
-                             alt="Document Preview">
-                        <div id="regions-overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <div class="mb-4">
+                        <p class="text-gray-600 mb-2">
+                            Status: <span class="font-semibold" id="status-text">{{ $ocrResult->status }}</span>
+                        </p>
+                        <p class="text-gray-600">
+                            Nama File: <span class="font-semibold">{{ $ocrResult->filename }}</span>
+                        </p>
                     </div>
-                </div>
 
-                <!-- Regions List -->
-                <div class="w-full md:w-1/4">
-                    <div class="bg-gray-50 rounded-lg p-4">
-                        <h3 class="text-lg font-semibold mb-3">Daftar Area</h3>
-                        <div id="regions-list" class="space-y-2">
-                            <!-- Regions will be added here dynamically -->
+                    <div class="border-t border-gray-200 pt-4">
+                        <div class="flex space-x-4 mb-4">
+                            <button id="add-region" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                <i class="fas fa-plus mr-2"></i> Tambah Area
+                            </button>
+                            <button id="clear-regions" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+                                <i class="fas fa-trash mr-2"></i> Hapus Semua Area
+                            </button>
+                            <button id="process-regions" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                                <i class="fas fa-play mr-2"></i> Proses Area Terpilih
+                            </button>
+                        </div>
+
+                        <div class="flex flex-wrap md:flex-nowrap space-y-4 md:space-y-0 md:space-x-4">
+                            <!-- Image Container -->
+                            <div class="w-full md:w-3/4">
+                                <div id="image-container" class="relative border-2 border-gray-300 rounded-lg overflow-hidden">
+                                    <img src="{{ Storage::url($ocrResult->image_path) }}" 
+                                         id="source-image" 
+                                         class="max-w-full h-auto"
+                                         alt="Document Preview">
+                                    <div id="regions-overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
+                                </div>
+                            </div>
+
+                            <!-- Regions List -->
+                            <div class="w-full md:w-1/4">
+                                <div class="bg-gray-50 rounded-lg p-4">
+                                    <h3 class="text-lg font-semibold mb-3">Daftar Area</h3>
+                                    <div id="regions-list" class="space-y-2">
+                                        <!-- Regions will be added here dynamically -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Results Section -->
+                        <div id="results-section" class="mt-6 hidden">
+                            <h3 class="text-xl font-semibold mb-3">Hasil OCR</h3>
+                            <div id="ocr-results" class="bg-gray-50 rounded-lg p-4">
+                                <!-- OCR results will be displayed here -->
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Results Section -->
-        <div id="results-section" class="mt-6 hidden">
-            <h3 class="text-xl font-semibold mb-3">Hasil OCR</h3>
-            <div id="ocr-results" class="bg-gray-50 rounded-lg p-4">
-                <!-- OCR results will be displayed here -->
-            </div>
-        </div>
+        </main>
     </div>
-</div>
 
 <style>
 .region-container {
@@ -165,7 +172,6 @@
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
-</style>
 </style>
 
 <script>
