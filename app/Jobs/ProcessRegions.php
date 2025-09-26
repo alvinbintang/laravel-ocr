@@ -53,14 +53,29 @@ class ProcessRegions implements ShouldQueue
                     $region['y']
                 );
 
-                // Save the cropped image temporarily
-                $tempPath = Storage::path('ocr/temp_' . uniqid() . '.png');
+                // Save the cropped image temporarily with unique name
+                $tempFileName = 'ocr/temp_region_' . $region['id'] . '_' . uniqid() . '.png';
+                $tempPath = Storage::disk('public')->path($tempFileName);
+                
+                // Ensure directory exists
+                $tempDir = dirname($tempPath);
+                if (!is_dir($tempDir)) {
+                    mkdir($tempDir, 0755, true);
+                }
+                
+                // Save the cropped image
                 $croppedImage->save($tempPath);
 
-                // Process the region with Tesseract
-                $text = (new TesseractOCR($tempPath))
+                // Process the region with Tesseract using TSV format
+                $tsv = (new TesseractOCR($tempPath))
                     ->lang('ind+eng')
+                    ->psm(6)
+                    ->oem(1)
+                    ->format('tsv')
                     ->run();
+
+                // Parse TSV output to extract text
+                $text = $this->parseTsvOutput($tsv);
 
                 // UPDATED: Add page information to results
                 $results[] = [
@@ -122,5 +137,30 @@ class ProcessRegions implements ShouldQueue
         }
         
         return null;
+    }
+
+    // ADDED: Helper method to parse TSV output from Tesseract
+    private function parseTsvOutput(string $tsv): string
+    {
+        $lines = explode("\n", trim($tsv));
+        $text = '';
+        
+        // Skip header line and process data lines
+        for ($i = 1; $i < count($lines); $i++) {
+            $columns = explode("\t", $lines[$i]);
+            
+            // TSV format: level, page_num, block_num, par_num, line_num, word_num, left, top, width, height, conf, text
+            if (count($columns) >= 12) {
+                $confidence = (int)$columns[10];
+                $wordText = trim($columns[11]);
+                
+                // Only include words with reasonable confidence (> 30)
+                if ($confidence > 30 && !empty($wordText)) {
+                    $text .= $wordText . ' ';
+                }
+            }
+        }
+        
+        return trim($text);
     }
 }
