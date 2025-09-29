@@ -34,38 +34,39 @@ class ProcessOcr implements ShouldQueue
         $ocrResult->update(['status' => 'processing']);
 
         try {
-            $outputPrefix = Storage::disk('public')->path('ocr/img_' . uniqid());
-            
-            // Ensure the ocr directory exists in public storage
-            Storage::disk('public')->makeDirectory('ocr');
-            
-            $process = new Process(['pdftoppm', '-png', $this->pdfPath, $outputPrefix]);
+            // 1. Convert PDF → PNG with higher resolution
+            $outputPrefix = Storage::path('ocr/tmp_' . uniqid());
+            $process = new Process(['pdftoppm', '-png', '-r', '300', $this->pdfPath, $outputPrefix]);
             $process->run();
-
             if (!$process->isSuccessful()) {
-                throw new \Exception($process->getErrorOutput());
+                throw new \Exception('PDF conversion failed: ' . $process->getErrorOutput());
             }
 
             // Get the generated image files
             $files = glob($outputPrefix . '-*.png');
             
             if (empty($files)) {
-                throw new \Exception('No images were generated from the PDF');
+                throw new \Exception('No images generated from PDF');
             }
 
             // Sort files to ensure correct page order
             sort($files);
+            
+            // Ensure the ocr directory exists in public storage
+            Storage::disk('public')->makeDirectory('ocr');
             
             // Process all pages
             $imagePaths = [];
             foreach ($files as $index => $file) {
                 $imagePath = 'ocr/' . basename($file);
                 
-                // Move each page to public storage
-                $sourceFile = str_replace(Storage::disk('public')->path(''), '', $file);
-                Storage::disk('public')->move($sourceFile, $imagePath);
+                // Copy file to public storage (since files are in temp location)
+                Storage::disk('public')->put($imagePath, file_get_contents($file));
                 
                 $imagePaths[] = $imagePath;
+                
+                // Clean up temporary file
+                @unlink($file);
             }
 
             // Update database with all image paths
