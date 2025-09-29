@@ -31,7 +31,14 @@ class ProcessOcr implements ShouldQueue
             return;
         }
 
-        $ocrResult->update(['status' => 'processing']);
+        // Update status to processing and clear any previous results
+        $ocrResult->update([
+            'status' => 'processing',
+            'text' => null,
+            'image_path' => null,
+            'image_paths' => null,
+            'ocr_results' => null
+        ]);
 
         try {
             // Log PDF information for debugging
@@ -42,54 +49,55 @@ class ProcessOcr implements ShouldQueue
                 'file_permissions' => file_exists($this->pdfPath) ? substr(sprintf('%o', fileperms($this->pdfPath)), -4) : 'N/A'
             ]);
 
-            // 1. Convert PDF → PNG with higher resolution
-            $outputPrefix = Storage::path('ocr/tmp_' . uniqid());
+            // Use tesseract directly on PDF
+            $outputPath = Storage::path('ocr/output_' . uniqid() . '.txt');
             
-            // Check if pdftoppm is installed and accessible
-            $checkPdftoppm = new Process(['where', 'pdftoppm']);
-            $checkPdftoppm->run();
-            if (!$checkPdftoppm->isSuccessful()) {
-                throw new \Exception('pdftoppm not found in system PATH');
+            // Check if tesseract is installed
+            $checkTesseract = new Process(['which', 'tesseract']);
+            $checkTesseract->run();
+            if (!$checkTesseract->isSuccessful()) {
+                throw new \Exception('Tesseract not found. Please install tesseract-ocr');
             }
 
-            $process = new Process(['pdftoppm', '-png', '-r', '300', $this->pdfPath, $outputPrefix]);
+            // Run OCR directly on PDF
+            $process = new Process([
+                'tesseract',
+                $this->pdfPath,     // Input PDF
+                pathinfo($outputPath, PATHINFO_DIRNAME) . '/' . pathinfo($outputPath, PATHINFO_FILENAME),  // Output path without extension
+                'PDF',              // Specify PDF input
+                '-l', 'eng',        // Language
+                '--oem', '1',       // OCR Engine Mode
+                '--psm', '1'        // Page Segmentation Mode
+            ]);
+            
+            \Illuminate\Support\Facades\Log::info('Running Tesseract command', [
+                'command' => $process->getCommandLine(),
+                'pdf_path' => $this->pdfPath,
+                'output_path' => $outputPath
+            ]);
+
             $process->run();
             if (!$process->isSuccessful()) {
-                throw new \Exception('PDF conversion failed: ' . $process->getErrorOutput());
+                throw new \Exception('OCR failed: ' . $process->getErrorOutput());
             }
 
-            // Get the generated image files
-            $files = glob($outputPrefix . '-*.png');
-            
-            if (empty($files)) {
-                throw new \Exception('No images generated from PDF');
+            // Read the OCR results
+            if (!file_exists($outputPath)) {
+                throw new \Exception('OCR output file not found');
             }
 
-            // Sort files to ensure correct page order
-            sort($files);
+            $ocrText = file_get_contents($outputPath);
             
-            // Ensure the ocr directory exists in public storage
-            Storage::disk('public')->makeDirectory('ocr');
-            
-            // Process all pages
-            $imagePaths = [];
-            foreach ($files as $index => $file) {
-                $imagePath = 'ocr/' . basename($file);
-                
-                // Copy file to public storage (since files are in temp location)
-                Storage::disk('public')->put($imagePath, file_get_contents($file));
-                
-                $imagePaths[] = $imagePath;
-                
-                // Clean up temporary file
-                @unlink($file);
-            }
+            // Clean up temporary file
+            @unlink($outputPath);
 
-            // Update database with all image paths
+            // Update database with OCR results
             $ocrResult->update([
-                'status' => 'awaiting_selection',
-                'image_path' => $imagePaths[0], // Keep first page as primary for backward compatibility
-                'image_paths' => json_encode($imagePaths) // Store all pages
+                'status' => 'done',
+                'text' => $ocrText,         // Store text in the dedicated column
+                'image_path' => null,       // We're not using images anymore
+                'image_paths' => null,      // We're not using images anymore
+                'ocr_results' => null       // No need for additional JSON storage
             ]);
 
             // Delete the original PDF
@@ -98,7 +106,10 @@ class ProcessOcr implements ShouldQueue
         } catch (\Exception $e) {
             $ocrResult->update([
                 'status' => 'error',
-                'ocr_results' => json_encode(['error' => $e->getMessage()])
+                'text' => 'Error: ' . $e->getMessage(),  // Store error in text field
+                'image_path' => null,
+                'image_paths' => null,
+                'ocr_results' => null
             ]);
         }
     }
