@@ -66,15 +66,19 @@ class ProcessRegions implements ShouldQueue
                 // Save the cropped image
                 $croppedImage->save($tempPath);
 
-                // Process the region with Tesseract using TSV format
-                $tsv = (new TesseractOCR($tempPath))
-                    ->lang('ind+eng')
-                    ->psm(6)
-                    ->oem(1)
+                // Process the region with Tesseract using TSV format with improved configuration
+                $tesseract = new TesseractOCR($tempPath);
+                $tesseract->lang('ind+eng')
+                    ->psm(6) // Page segmentation mode: Assume a single uniform block of text
+                    ->oem(1) // OCR Engine mode: Neural nets LSTM only
                     ->format('tsv')
-                    ->run();
+                    ->config('tessedit_char_whitelist', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,;:\'"-()[]{}!?@#$%^&*+=<>/\\| ')
+                    ->dpi(300); // Higher DPI for better recognition
+                
+                // Run OCR
+                $tsv = $tesseract->run();
 
-                // Parse TSV output to extract text
+                // Parse TSV output to extract text with improved confidence handling
                 $text = $this->parseTsvOutput($tsv);
 
                 // UPDATED: Add page information to results
@@ -139,11 +143,13 @@ class ProcessRegions implements ShouldQueue
         return null;
     }
 
-    // ADDED: Helper method to parse TSV output from Tesseract
+    // Improved method to parse TSV output from Tesseract with better text structure preservation
     private function parseTsvOutput(string $tsv): string
     {
         $lines = explode("\n", trim($tsv));
-        $text = '';
+        $result = [];
+        $currentLine = -1;
+        $currentParagraph = -1;
         
         // Skip header line and process data lines
         for ($i = 1; $i < count($lines); $i++) {
@@ -151,16 +157,37 @@ class ProcessRegions implements ShouldQueue
             
             // TSV format: level, page_num, block_num, par_num, line_num, word_num, left, top, width, height, conf, text
             if (count($columns) >= 12) {
+                $level = (int)$columns[0];
+                $parNum = (int)$columns[3];
+                $lineNum = (int)$columns[4];
                 $confidence = (int)$columns[10];
                 $wordText = trim($columns[11]);
                 
-                // Only include words with reasonable confidence (> 30)
-                if ($confidence > 30 && !empty($wordText)) {
-                    $text .= $wordText . ' ';
+                // Only include words with reasonable confidence (> 40)
+                if ($confidence > 40 && !empty($wordText)) {
+                    // Track paragraph and line changes to preserve structure
+                    if ($parNum !== $currentParagraph) {
+                        $currentParagraph = $parNum;
+                        if (!empty($result)) {
+                            $result[] = "\n\n"; // Double newline for paragraph breaks
+                        }
+                    } elseif ($lineNum !== $currentLine) {
+                        $currentLine = $lineNum;
+                        if (!empty($result)) {
+                            $result[] = "\n"; // Single newline for line breaks
+                        }
+                    } else {
+                        // Add space between words on the same line
+                        if (!empty($result)) {
+                            $result[] = " ";
+                        }
+                    }
+                    
+                    $result[] = $wordText;
                 }
             }
         }
         
-        return trim($text);
+        return trim(implode('', $result));
     }
 }

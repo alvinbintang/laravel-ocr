@@ -104,10 +104,10 @@
                         @endif
 
                         <!-- Image Preview Container -->
-                        <div class="mb-6">
-                            <div id="image-container" class="relative border-2 border-gray-300 rounded-lg overflow-hidden bg-white" style="min-height: 600px;">
-                                <img id="preview-image" src="" alt="Document Preview" class="max-w-full h-auto block mx-auto" style="display: none;">
-                                <div id="loading-placeholder" class="flex items-center justify-center h-96">
+                        <div class="relative mb-6" id="image-preview-container">
+                            <div id="image-container" class="relative border border-gray-300 rounded overflow-hidden">
+                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto" style="display: none;">
+                                <div id="loading-placeholder" class="flex items-center justify-center bg-gray-100 h-96">
                                     <div class="text-center">
                                         <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
                                         <p class="text-gray-600">Loading image...</p>
@@ -132,25 +132,93 @@
                         <div id="results-section" class="mt-8">
                             <div class="flex justify-between items-center mb-4">
                                 <h3 class="text-lg font-medium">OCR Results</h3>
-                                <a href="{{ route('ocr.export', $ocrResult->id) }}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium">
-                                    Export to Excel
-                                </a>
+                                <div class="flex space-x-2">
+                                    <a href="{{ route('ocr.export', $ocrResult->id) }}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                        Export to Excel
+                                    </a>
+                                    <a href="{{ route('ocr.export-json', $ocrResult->id) }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                        Export JSON
+                                    </a>
+                                    <a href="{{ route('ocr.export-csv', $ocrResult->id) }}" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                        Export CSV
+                                    </a>
+                                </div>
                             </div>
                             
-                            <div class="space-y-4">
-                                @foreach($ocrResult->ocr_results as $index => $result)
-                                <div class="border border-gray-200 rounded-lg p-4">
-                                    <div class="flex justify-between items-start mb-2">
-                                        <h4 class="font-medium">Region {{ $index + 1 }} (Page {{ $result['page'] ?? 1 }})</h4>
-                                        <span class="text-xs text-gray-500">
-                                            {{ $result['coordinates']['width'] ?? 0 }}x{{ $result['coordinates']['height'] ?? 0 }}px
-                                        </span>
+                            <!-- Tab navigation -->
+                            <div class="border-b border-gray-200 mb-4">
+                                <nav class="-mb-px flex space-x-8">
+                                    <button id="tab-cards" class="border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                                        Cards View
+                                    </button>
+                                    <button id="tab-table" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                                        Table View
+                                    </button>
+                                    <button id="tab-json" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                                        JSON View
+                                    </button>
+                                </nav>
+                            </div>
+                            
+                            <!-- Cards View -->
+                            <div id="view-cards" class="tab-content">
+                                <div class="space-y-4">
+                                    @foreach($ocrResult->ocr_results as $index => $result)
+                                    <div class="border border-gray-200 rounded-lg p-4">
+                                        <div class="flex justify-between items-start mb-2">
+                                            <h4 class="font-medium">Region {{ $index + 1 }} (Page {{ $result['page'] ?? 1 }})</h4>
+                                            <span class="text-xs text-gray-500">
+                                                {{ $result['coordinates']['width'] ?? 0 }}x{{ $result['coordinates']['height'] ?? 0 }}px
+                                            </span>
+                                        </div>
+                                        <div class="bg-gray-50 p-3 rounded border">
+                                            <pre class="whitespace-pre-wrap text-sm">{{ $result['text'] ?? 'No text detected' }}</pre>
+                                        </div>
                                     </div>
-                                    <div class="bg-gray-50 p-3 rounded border">
-                                        <pre class="whitespace-pre-wrap text-sm">{{ $result['text'] ?? 'No text detected' }}</pre>
-                                    </div>
+                                    @endforeach
                                 </div>
-                                @endforeach
+                            </div>
+                            
+                            <!-- Table View -->
+                            <div id="view-table" class="tab-content hidden">
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-gray-200">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Page</th>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Text</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="bg-white divide-y divide-gray-200">
+                                            @foreach($ocrResult->ocr_results as $index => $result)
+                                                <tr>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $result['page'] ?? 1 }}</td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $index + 1 }}</td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                        X: {{ $result['coordinates']['x'] ?? 0 }}, 
+                                                        Y: {{ $result['coordinates']['y'] ?? 0 }}, 
+                                                        W: {{ $result['coordinates']['width'] ?? 0 }}, 
+                                                        H: {{ $result['coordinates']['height'] ?? 0 }}
+                                                    </td>
+                                                    <td class="px-6 py-4 text-sm text-gray-500">
+                                                        <div class="max-h-20 overflow-y-auto">
+                                                            {{ $result['text'] ?? 'No text detected' }}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- JSON View -->
+                            <div id="view-json" class="tab-content hidden">
+                                <div class="bg-gray-800 text-white p-4 rounded-md overflow-x-auto">
+                                    <pre class="text-sm">{{ json_encode($ocrResult->ocr_results, JSON_PRETTY_PRINT) }}</pre>
+                                </div>
                             </div>
                         </div>
                         @endif
@@ -247,10 +315,14 @@
                 this.selectedRegion = null;
                 this.isResizing = false;
                 this.resizeHandle = null;
+                this.nextRegionId = 1;
                 
                 this.initializeElements();
                 this.loadCurrentPage();
                 this.bindEvents();
+                
+                // Load any existing regions from server if available
+                this.loadExistingRegions();
             }
 
             initializeElements() {
@@ -306,6 +378,20 @@
 
                 // Prevent context menu on image container
                 this.imageContainer.addEventListener('contextmenu', (e) => e.preventDefault());
+                
+                // Add keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    // Escape key to cancel drawing
+                    if (e.key === 'Escape' && this.isDrawing) {
+                        this.stopDrawing();
+                        this.clearDrawingPreview();
+                    }
+                    
+                    // Delete key to remove selected region
+                    if (e.key === 'Delete' && this.selectedRegion) {
+                        this.deleteRegion(this.selectedRegion);
+                    }
+                });
             }
 
             loadCurrentPage() {
@@ -446,7 +532,7 @@
                 const height = Math.abs(drawingData.currentY - drawingData.startY);
 
                 const region = {
-                    id: Date.now(),
+                    id: this.nextRegionId++,
                     x: left,
                     y: top,
                     width: width,
@@ -460,6 +546,27 @@
                 this.updateProcessButton();
             }
 
+            loadExistingRegions() {
+                // Check if there are any saved regions in the OcrResult
+                const savedRegions = {!! json_encode($ocrResult->selected_regions ?? []) !!};
+                
+                if (savedRegions && savedRegions.length > 0) {
+                    savedRegions.forEach(region => {
+                        this.regions.push({
+                            id: this.nextRegionId++,
+                            x: region.x,
+                            y: region.y,
+                            width: region.width,
+                            height: region.height,
+                            page: region.page || 1
+                        });
+                    });
+                    
+                    this.updateRegionsList();
+                    this.updateProcessButton();
+                }
+            }
+            
             updateRegionsDisplay() {
                 // Clear existing regions
                 this.regionsOverlay.innerHTML = '';
@@ -471,6 +578,9 @@
                     const regionElement = this.createRegionElement(region, index + 1);
                     this.regionsOverlay.appendChild(regionElement);
                 });
+                
+                // Update process button state based on total regions
+                this.updateProcessButton();
             }
 
             createRegionElement(region, displayNumber) {
@@ -567,8 +677,15 @@
                     return;
                 }
 
+                // Disable buttons and show processing state
+                this.processRegionsBtn.disabled = true;
+                this.processRegionsBtn.innerHTML = '<span class="inline-block animate-spin mr-2">↻</span> Processing...';
+                this.addRegionBtn.disabled = true;
+                this.clearRegionsBtn.disabled = true;
+
                 // Prepare regions data for processing
                 const regionsData = this.regions.map(region => ({
+                    id: region.id,
                     x: Math.round(region.x),
                     y: Math.round(region.y),
                     width: Math.round(region.width),
@@ -590,16 +707,70 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        // Redirect to results or reload page
-                        window.location.reload();
+                        // Show processing message
+                        const processingDiv = document.createElement('div');
+                        processingDiv.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+                        processingDiv.innerHTML = `
+                            <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+                                <h3 class="text-lg font-medium mb-4">Processing OCR</h3>
+                                <div class="flex items-center mb-4">
+                                    <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mr-3"></div>
+                                    <p>Processing ${this.regions.length} regions across ${Object.keys(this.regions.reduce((acc, r) => ({...acc, [r.page]: true}), {})).length} pages...</p>
+                                </div>
+                                <p class="text-sm text-gray-500">This may take a few moments. Please don't close this window.</p>
+                            </div>
+                        `;
+                        document.body.appendChild(processingDiv);
+                        
+                        // Poll for status and redirect when done
+                        this.pollForResults();
                     } else {
+                        // Reset buttons
+                        this.processRegionsBtn.disabled = false;
+                        this.processRegionsBtn.textContent = 'Process OCR';
+                        this.addRegionBtn.disabled = false;
+                        this.clearRegionsBtn.disabled = false;
+                        
                         alert('Error processing regions: ' + (data.message || 'Unknown error'));
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
+                    
+                    // Reset buttons
+                    this.processRegionsBtn.disabled = false;
+                    this.processRegionsBtn.textContent = 'Process OCR';
+                    this.addRegionBtn.disabled = false;
+                    this.clearRegionsBtn.disabled = false;
+                    
                     alert('Error processing regions. Please try again.');
                 });
+            }
+            
+            pollForResults() {
+                const checkStatus = () => {
+                    fetch('{{ route("ocr.status-check", $ocrResult->id) }}')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'done') {
+                                window.location.href = '{{ route("ocr.index") }}';
+                            } else if (data.status === 'error') {
+                                alert('Error processing OCR: ' + (data.message || 'Unknown error'));
+                                window.location.reload();
+                            } else {
+                                // Still processing, check again in 2 seconds
+                                setTimeout(checkStatus, 2000);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error checking status:', error);
+                            // Try again in 3 seconds
+                            setTimeout(checkStatus, 3000);
+                        });
+                };
+                
+                // Start polling
+                setTimeout(checkStatus, 2000);
             }
         }
 
@@ -615,6 +786,29 @@
                 window.location.reload();
             }, 3000);
             @endif
+            
+            // Tab switching functionality for OCR results
+            if (document.getElementById('tab-cards')) {
+                const tabs = ['cards', 'table', 'json'];
+                const tabButtons = tabs.map(tab => document.getElementById(`tab-${tab}`));
+                const tabViews = tabs.map(tab => document.getElementById(`view-${tab}`));
+                
+                tabButtons.forEach((button, index) => {
+                    button.addEventListener('click', () => {
+                        // Update tab buttons
+                        tabButtons.forEach(btn => {
+                            btn.classList.remove('border-blue-500', 'text-blue-600');
+                            btn.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                        });
+                        button.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                        button.classList.add('border-blue-500', 'text-blue-600');
+                        
+                        // Update tab content
+                        tabViews.forEach(view => view.classList.add('hidden'));
+                        tabViews[index].classList.remove('hidden');
+                    });
+                });
+            }
         });
     </script>
 </body>

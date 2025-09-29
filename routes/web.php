@@ -12,3 +12,5 @@ Route::get('/ocr/{id}/status-check', [OcrController::class, 'statusCheck'])->nam
 Route::post('/ocr/{id}/process-regions', [OcrController::class, 'processRegions'])->name('ocr.process-regions');
 Route::get('/ocr/{id}/result', [OcrController::class, 'showResult'])->name('ocr.result');
 Route::get('/ocr/export/{id}', [ExcelExportController::class, 'exportToExcel'])->name('ocr.export');
+Route::get('/ocr/export-json/{id}', [OcrController::class, 'exportJson'])->name('ocr.export-json');
+Route::get('/ocr/export-csv/{id}', [OcrController::class, 'exportCsv'])->name('ocr.export-csv');
