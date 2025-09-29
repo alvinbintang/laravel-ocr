@@ -89,7 +89,8 @@ class ProcessOcr implements ShouldQueue
     private function convertPdfToImages($pdfPath, $ocrResultId)
     {
         $imagePaths = [];
-        $outputDir = Storage::path('ocr/images/' . $ocrResultId);
+        // UPDATED: Change to public storage path so images can be accessed via web
+        $outputDir = Storage::disk('public')->path('ocr/images/' . $ocrResultId);
         
         // Create output directory if it doesn't exist
         if (!file_exists($outputDir)) {

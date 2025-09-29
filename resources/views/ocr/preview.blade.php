@@ -467,7 +467,8 @@
                         this.updateRegionsDisplay();
                     };
                     
-                    this.previewImage.src = `/storage/${imagePath}`;
+                    // UPDATED: Use asset helper for proper public storage path
+                    this.previewImage.src = `{{ asset('storage') }}/${imagePath}`;
                 }
 
                 this.updatePageNavigation();
