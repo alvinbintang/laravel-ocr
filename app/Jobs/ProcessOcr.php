@@ -34,8 +34,24 @@ class ProcessOcr implements ShouldQueue
         $ocrResult->update(['status' => 'processing']);
 
         try {
+            // Log PDF information for debugging
+            \Illuminate\Support\Facades\Log::info('PDF Processing Details', [
+                'pdf_path' => $this->pdfPath,
+                'file_exists' => file_exists($this->pdfPath),
+                'file_size' => file_exists($this->pdfPath) ? filesize($this->pdfPath) : 0,
+                'file_permissions' => file_exists($this->pdfPath) ? substr(sprintf('%o', fileperms($this->pdfPath)), -4) : 'N/A'
+            ]);
+
             // 1. Convert PDF → PNG with higher resolution
             $outputPrefix = Storage::path('ocr/tmp_' . uniqid());
+            
+            // Check if pdftoppm is installed and accessible
+            $checkPdftoppm = new Process(['where', 'pdftoppm']);
+            $checkPdftoppm->run();
+            if (!$checkPdftoppm->isSuccessful()) {
+                throw new \Exception('pdftoppm not found in system PATH');
+            }
+
             $process = new Process(['pdftoppm', '-png', '-r', '300', $this->pdfPath, $outputPrefix]);
             $process->run();
             if (!$process->isSuccessful()) {

@@ -22,6 +22,20 @@ class OcrController extends Controller
             'pdf' => 'required|mimes:pdf|max:20480', // max 20MB
         ]);
 
+        // Log upload information
+        \Illuminate\Support\Facades\Log::info('PDF Upload Details', [
+            'original_name' => $request->file('pdf')->getClientOriginalName(),
+            'mime_type' => $request->file('pdf')->getMimeType(),
+            'size' => $request->file('pdf')->getSize(),
+            'error' => $request->file('pdf')->getError()
+        ]);
+
+        // Additional PDF validation
+        $pdfContent = file_get_contents($request->file('pdf')->getRealPath());
+        if (substr($pdfContent, 0, 4) !== '%PDF') {
+            return back()->with('error', 'File bukan PDF yang valid. Pastikan file tidak corrupt.');
+        }
+
         // Simpan PDF
         $path = $request->file('pdf')->store('ocr');
 
