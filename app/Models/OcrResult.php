@@ -38,6 +38,18 @@ class OcrResult extends Model
         return $value ? json_decode($value, true) : [];
     }
 
+    // ADDED: Helper method to get image path for specific page
+    public function getImagePathForPage($page)
+    {
+        $imagePaths = $this->getImagePathsAttribute($this->attributes['image_paths'] ?? null);
+        if (empty($imagePaths) || $page < 1 || $page > count($imagePaths)) {
+            return null;
+        }
+        
+        $relativePath = $imagePaths[$page - 1];
+        return asset('storage/' . $relativePath);
+    }
+
     // ADDED: Helper method to get OCR results
     public function getOcrResultsAttribute($value)
     {

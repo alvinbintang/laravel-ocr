@@ -107,10 +107,11 @@
                         <div class="relative mb-6" id="image-preview-container">
                             <div id="image-container" class="relative border border-gray-300 rounded overflow-hidden">
                                 <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto" style="display: none;">
+                                <!-- UPDATED: Improved loading placeholder with spinner -->
                                 <div id="loading-placeholder" class="flex items-center justify-center bg-gray-100 h-96">
                                     <div class="text-center">
-                                        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                                        <p class="text-gray-600">Loading image...</p>
+                                        <div class="loading-spinner"></div>
+                                        <p class="text-gray-600">Loading page {{ $currentPage ?? 1 }} of {{ $ocrResult->page_count ?? 1 }}...</p>
                                     </div>
                                 </div>
                                 <div id="regions-overlay" class="absolute inset-0 pointer-events-none"></div>
@@ -236,6 +237,57 @@
     </div>
 
     <style>
+        .image-container {
+            position: relative;
+            display: inline-block;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #f9fafb;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            max-width: 100%;
+            /* UPDATED: Improved responsive image container */
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        .preview-image {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            /* UPDATED: Improved image display */
+            min-height: 400px;
+            object-fit: contain;
+            background-color: white;
+        }
+
+        .loading-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            background-color: #f3f4f6;
+            color: #6b7280;
+            font-size: 14px;
+            /* UPDATED: Better loading state */
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .loading-spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #e5e7eb;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         .region-container {
             position: absolute;
             border: 2px solid #3b82f6;
@@ -401,6 +453,20 @@
                 if (imagePath) {
                     this.loadingPlaceholder.style.display = 'flex';
                     this.previewImage.style.display = 'none';
+                    
+                    // UPDATED: Improved image loading with error handling
+                    this.previewImage.onerror = () => {
+                        console.error('Failed to load image:', imagePath);
+                        this.loadingPlaceholder.innerHTML = '<p class="text-red-500">Failed to load image for page ' + this.currentPage + '</p>';
+                    };
+                    
+                    // Clear any previous error handlers
+                    this.previewImage.onload = () => {
+                        this.loadingPlaceholder.style.display = 'none';
+                        this.previewImage.style.display = 'block';
+                        this.updateRegionsDisplay();
+                    };
+                    
                     this.previewImage.src = `/storage/${imagePath}`;
                 }
 
@@ -574,8 +640,13 @@
                 // Show only regions for current page
                 const currentPageRegions = this.regions.filter(r => r.page === this.currentPage);
                 
+                // UPDATED: Improved region display with better numbering
                 currentPageRegions.forEach((region, index) => {
-                    const regionElement = this.createRegionElement(region, index + 1);
+                    // Calculate global region number across all pages
+                    const allRegionsBeforeCurrentPage = this.regions.filter(r => r.page < this.currentPage).length;
+                    const globalRegionNumber = allRegionsBeforeCurrentPage + index + 1;
+                    
+                    const regionElement = this.createRegionElement(region, globalRegionNumber);
                     this.regionsOverlay.appendChild(regionElement);
                 });
                 
@@ -648,15 +719,19 @@
                 });
 
                 let html = '';
+                let globalRegionCounter = 1; // ADDED: Global counter for consistent numbering
+                
                 Object.keys(groupedRegions).sort((a, b) => parseInt(a) - parseInt(b)).forEach(page => {
                     html += `<div class="mb-3">
                         <h4 class="font-medium text-sm text-gray-700 mb-2">Page ${page} (${groupedRegions[page].length} regions)</h4>
                         <div class="space-y-1">`;
                     
                     groupedRegions[page].forEach((region, index) => {
-                        html += `<div class="text-sm text-gray-600 bg-gray-50 p-2 rounded">
-                            Region ${index + 1}: ${Math.round(region.width)}×${Math.round(region.height)}px at (${Math.round(region.x)}, ${Math.round(region.y)})
+                        html += `<div class="text-sm text-gray-600 bg-gray-50 p-2 rounded flex justify-between items-center">
+                            <span>Region ${globalRegionCounter}: ${Math.round(region.width)}×${Math.round(region.height)}px at (${Math.round(region.x)}, ${Math.round(region.y)})</span>
+                            <button onclick="regionManager.deleteRegion(${region.id})" class="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded">Delete</button>
                         </div>`;
+                        globalRegionCounter++; // UPDATED: Increment global counter
                     });
                     
                     html += '</div></div>';
@@ -777,7 +852,7 @@
         // Initialize when DOM is loaded
         document.addEventListener('DOMContentLoaded', function() {
             @if($ocrResult->status === 'awaiting_selection' && $ocrResult->page_count > 0)
-            new RegionManager();
+            window.regionManager = new RegionManager(); // UPDATED: Make regionManager globally accessible
             @endif
 
             // Auto-refresh for processing status

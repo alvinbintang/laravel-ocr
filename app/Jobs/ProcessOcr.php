@@ -114,16 +114,28 @@ class ProcessOcr implements ShouldQueue
         // Convert PDF to images (PNG format for better quality)
         $outputPattern = $outputDir . '/page-%03d.png';
         
-        $process = new Process([
+        // Build command arguments step by step for better compatibility
+        $commandArgs = [
             $convertCommand,
             '-density', '300',          // High DPI for better quality
             '-quality', '100',          // Maximum quality
             '-colorspace', 'RGB',       // Ensure RGB colorspace
             '-background', 'white',     // White background
-            '-alpha', 'remove',         // Remove transparency
-            $pdfPath,
-            $outputPattern
-        ]);
+            $pdfPath
+        ];
+        
+        // Add alpha removal for newer ImageMagick versions
+        if ($convertCommand === 'magick') {
+            $commandArgs[] = '-alpha';
+            $commandArgs[] = 'remove';
+        } else {
+            // For older convert command, use flatten instead
+            $commandArgs[] = '-flatten';
+        }
+        
+        $commandArgs[] = $outputPattern;
+        
+        $process = new Process($commandArgs);
 
         \Illuminate\Support\Facades\Log::info('Running ImageMagick command', [
             'command' => $process->getCommandLine(),
@@ -134,8 +146,40 @@ class ProcessOcr implements ShouldQueue
         $process->setTimeout(300); // 5 minutes timeout
         $process->run();
 
+        \Illuminate\Support\Facades\Log::info('ImageMagick process completed', [
+            'exit_code' => $process->getExitCode(),
+            'output' => $process->getOutput(),
+            'error_output' => $process->getErrorOutput(),
+            'is_successful' => $process->isSuccessful()
+        ]);
+
         if (!$process->isSuccessful()) {
-            throw new \Exception('PDF to image conversion failed: ' . $process->getErrorOutput());
+            // Try alternative approach with simpler command for problematic PDFs
+            \Illuminate\Support\Facades\Log::info('First attempt failed, trying alternative approach');
+            
+            $alternativeArgs = [
+                $convertCommand,
+                '-density', '150',      // Lower density for compatibility
+                $pdfPath,
+                '-background', 'white',
+                '-flatten',             // Use flatten instead of alpha remove
+                $outputPattern
+            ];
+            
+            $alternativeProcess = new Process($alternativeArgs);
+            $alternativeProcess->setTimeout(300);
+            $alternativeProcess->run();
+            
+            \Illuminate\Support\Facades\Log::info('Alternative ImageMagick process completed', [
+                'exit_code' => $alternativeProcess->getExitCode(),
+                'output' => $alternativeProcess->getOutput(),
+                'error_output' => $alternativeProcess->getErrorOutput(),
+                'is_successful' => $alternativeProcess->isSuccessful()
+            ]);
+            
+            if (!$alternativeProcess->isSuccessful()) {
+                throw new \Exception('PDF to image conversion failed: ' . $process->getErrorOutput() . ' | Alternative attempt: ' . $alternativeProcess->getErrorOutput());
+            }
         }
 
         // Collect generated image paths
