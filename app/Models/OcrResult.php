@@ -14,20 +14,33 @@ class OcrResult extends Model
         'text',
         'status',
         'image_path',
-        'image_paths', // ADDED: Store multiple image paths for multi-page PDFs
+        'image_paths', // Store multiple image paths for multi-page PDFs
         'ocr_results',
+        'selected_regions', // ADDED: Store selected regions data
     ];
 
-    // ADDED: Helper method to get all image paths
+    // Helper method to get all image paths
     public function getImagePathsAttribute($value)
     {
         return $value ? json_decode($value, true) : [];
     }
 
-    // ADDED: Helper method to get total page count
+    // Helper method to get total page count
     public function getPageCountAttribute()
     {
         $imagePaths = $this->getImagePathsAttribute($this->attributes['image_paths'] ?? null);
         return count($imagePaths);
+    }
+
+    // ADDED: Helper method to get selected regions
+    public function getSelectedRegionsAttribute($value)
+    {
+        return $value ? json_decode($value, true) : [];
+    }
+
+    // ADDED: Helper method to get OCR results
+    public function getOcrResultsAttribute($value)
+    {
+        return $value ? json_decode($value, true) : [];
     }
 }

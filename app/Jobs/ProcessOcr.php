@@ -18,12 +18,18 @@ class ProcessOcr implements ShouldQueue
     protected $ocrResultId;
     protected $pdfPath;
 
+    /**
+     * Create a new job instance.
+     */
     public function __construct($ocrResultId, $pdfPath)
     {
         $this->ocrResultId = $ocrResultId;
         $this->pdfPath = $pdfPath;
     }
 
+    /**
+     * Execute the job.
+     */
     public function handle(): void
     {
         $ocrResult = OcrResult::find($this->ocrResultId);
@@ -49,68 +55,107 @@ class ProcessOcr implements ShouldQueue
                 'file_permissions' => file_exists($this->pdfPath) ? substr(sprintf('%o', fileperms($this->pdfPath)), -4) : 'N/A'
             ]);
 
-            // Use tesseract directly on PDF
-            $outputPath = Storage::path('ocr/output_' . uniqid() . '.txt');
+            // Convert PDF to images using ImageMagick
+            $imagePaths = $this->convertPdfToImages($this->pdfPath, $ocrResult->id);
             
-            // Check if tesseract is installed
-            $checkTesseract = new Process(['which', 'tesseract']);
-            $checkTesseract->run();
-            if (!$checkTesseract->isSuccessful()) {
-                throw new \Exception('Tesseract not found. Please install tesseract-ocr');
+            if (empty($imagePaths)) {
+                throw new \Exception('Failed to convert PDF to images');
             }
 
-            // Run OCR directly on PDF
-            $process = new Process([
-                'tesseract',
-                $this->pdfPath,     // Input PDF
-                pathinfo($outputPath, PATHINFO_DIRNAME) . '/' . pathinfo($outputPath, PATHINFO_FILENAME),  // Output path without extension
-                'PDF',              // Specify PDF input
-                '-l', 'eng',        // Language
-                '--oem', '1',       // OCR Engine Mode
-                '--psm', '1'        // Page Segmentation Mode
-            ]);
-            
-            \Illuminate\Support\Facades\Log::info('Running Tesseract command', [
-                'command' => $process->getCommandLine(),
-                'pdf_path' => $this->pdfPath,
-                'output_path' => $outputPath
-            ]);
-
-            $process->run();
-            if (!$process->isSuccessful()) {
-                throw new \Exception('OCR failed: ' . $process->getErrorOutput());
-            }
-
-            // Read the OCR results
-            if (!file_exists($outputPath)) {
-                throw new \Exception('OCR output file not found');
-            }
-
-            $ocrText = file_get_contents($outputPath);
-            
-            // Clean up temporary file
-            @unlink($outputPath);
-
-            // Update database with OCR results
+            // Update database with image paths and set status to awaiting_selection
             $ocrResult->update([
-                'status' => 'done',
-                'text' => $ocrText,         // Store text in the dedicated column
-                'image_path' => null,       // We're not using images anymore
-                'image_paths' => null,      // We're not using images anymore
-                'ocr_results' => null       // No need for additional JSON storage
+                'status' => 'awaiting_selection',
+                'image_paths' => json_encode($imagePaths),
+                'image_path' => $imagePaths[0] ?? null, // First page as primary image
             ]);
 
-            // Delete the original PDF
+            // Delete the original PDF after successful conversion
             Storage::delete(str_replace(Storage::path(''), '', $this->pdfPath));
 
         } catch (\Exception $e) {
             $ocrResult->update([
                 'status' => 'error',
-                'text' => 'Error: ' . $e->getMessage(),  // Store error in text field
+                'text' => 'Error: ' . $e->getMessage(),
                 'image_path' => null,
                 'image_paths' => null,
                 'ocr_results' => null
             ]);
         }
+    }
+
+    /**
+     * Convert PDF to images using ImageMagick
+     */
+    private function convertPdfToImages($pdfPath, $ocrResultId)
+    {
+        $imagePaths = [];
+        $outputDir = Storage::path('ocr/images/' . $ocrResultId);
+        
+        // Create output directory if it doesn't exist
+        if (!file_exists($outputDir)) {
+            mkdir($outputDir, 0755, true);
+        }
+
+        // Check if ImageMagick is installed
+        $checkImageMagick = new Process(['magick', '-version']);
+        $checkImageMagick->run();
+        if (!$checkImageMagick->isSuccessful()) {
+            // Try convert command (older ImageMagick versions)
+            $checkConvert = new Process(['convert', '-version']);
+            $checkConvert->run();
+            if (!$checkConvert->isSuccessful()) {
+                throw new \Exception('ImageMagick not found. Please install ImageMagick');
+            }
+            $convertCommand = 'convert';
+        } else {
+            $convertCommand = 'magick';
+        }
+
+        // Convert PDF to images (PNG format for better quality)
+        $outputPattern = $outputDir . '/page-%03d.png';
+        
+        $process = new Process([
+            $convertCommand,
+            '-density', '300',          // High DPI for better quality
+            '-quality', '100',          // Maximum quality
+            '-colorspace', 'RGB',       // Ensure RGB colorspace
+            '-background', 'white',     // White background
+            '-alpha', 'remove',         // Remove transparency
+            $pdfPath,
+            $outputPattern
+        ]);
+
+        \Illuminate\Support\Facades\Log::info('Running ImageMagick command', [
+            'command' => $process->getCommandLine(),
+            'pdf_path' => $pdfPath,
+            'output_pattern' => $outputPattern
+        ]);
+
+        $process->setTimeout(300); // 5 minutes timeout
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            throw new \Exception('PDF to image conversion failed: ' . $process->getErrorOutput());
+        }
+
+        // Collect generated image paths
+        $files = glob($outputDir . '/page-*.png');
+        sort($files); // Ensure proper page order
+
+        foreach ($files as $file) {
+            $relativePath = 'ocr/images/' . $ocrResultId . '/' . basename($file);
+            $imagePaths[] = $relativePath;
+        }
+
+        if (empty($imagePaths)) {
+            throw new \Exception('No images were generated from PDF');
+        }
+
+        \Illuminate\Support\Facades\Log::info('PDF conversion completed', [
+            'total_pages' => count($imagePaths),
+            'image_paths' => $imagePaths
+        ]);
+
+        return $imagePaths;
     }
 }
