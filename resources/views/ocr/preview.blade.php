@@ -172,7 +172,29 @@
                                                 {{ $result['coordinates']['width'] ?? 0 }}x{{ $result['coordinates']['height'] ?? 0 }}px
                                             </span>
                                         </div>
+                                        
+                                        <!-- ADDED: Display cropped image if available -->
+                                        @if(isset($ocrResult->cropped_images) && is_array($ocrResult->cropped_images))
+                                            @php
+                                                $croppedImage = collect($ocrResult->cropped_images)->firstWhere(function($image) use ($result) {
+                                                    return isset($image['region_id']) && $image['region_id'] == ($result['region_id'] ?? null) &&
+                                                           isset($image['page']) && $image['page'] == ($result['page'] ?? 1);
+                                                });
+                                            @endphp
+                                            @if($croppedImage && isset($croppedImage['path']))
+                                            <div class="mb-3">
+                                                <h5 class="text-sm font-medium text-gray-700 mb-2">Selected Image:</h5>
+                                                <div class="border border-gray-300 rounded-lg p-2 bg-white inline-block">
+                                                    <img src="{{ asset('storage/' . $croppedImage['path']) }}" 
+                                                         alt="Cropped region {{ $index + 1 }}" 
+                                                         class="max-w-xs max-h-32 object-contain rounded shadow-sm">
+                                                </div>
+                                            </div>
+                                            @endif
+                                        @endif
+                                        
                                         <div class="bg-gray-50 p-3 rounded border">
+                                            <h5 class="text-sm font-medium text-gray-700 mb-2">Extracted Text:</h5>
                                             <pre class="whitespace-pre-wrap text-sm">{{ $result['text'] ?? 'No text detected' }}</pre>
                                         </div>
                                     </div>
@@ -188,6 +210,7 @@
                                             <tr>
                                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Page</th>
                                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
+                                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Selected Image</th>
                                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
                                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Text</th>
                                             </tr>
@@ -197,6 +220,26 @@
                                                 <tr>
                                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $result['page'] ?? 1 }}</td>
                                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $index + 1 }}</td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                        <!-- ADDED: Display cropped image in table -->
+                                                        @if(isset($ocrResult->cropped_images) && is_array($ocrResult->cropped_images))
+                                                            @php
+                                                                $croppedImage = collect($ocrResult->cropped_images)->firstWhere(function($image) use ($result) {
+                                                                    return isset($image['region_id']) && $image['region_id'] == ($result['region_id'] ?? null) &&
+                                                                           isset($image['page']) && $image['page'] == ($result['page'] ?? 1);
+                                                                });
+                                                            @endphp
+                                                            @if($croppedImage && isset($croppedImage['path']))
+                                                                <img src="{{ asset('storage/' . $croppedImage['path']) }}" 
+                                                                     alt="Cropped region {{ $index + 1 }}" 
+                                                                     class="w-16 h-16 object-contain border border-gray-300 rounded">
+                                                            @else
+                                                                <span class="text-gray-400 text-xs">No image</span>
+                                                            @endif
+                                                        @else
+                                                            <span class="text-gray-400 text-xs">No image</span>
+                                                        @endif
+                                                    </td>
                                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                         X: {{ $result['coordinates']['x'] ?? 0 }}, 
                                                         Y: {{ $result['coordinates']['y'] ?? 0 }}, 

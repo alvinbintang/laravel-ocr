@@ -43,6 +43,7 @@ class ProcessRegions implements ShouldQueue
 
             $image = Image::read($imagePath);
             $results = [];
+            $croppedImages = []; // ADDED: Store cropped image paths
 
             foreach ($this->regions as $region) {
                 // Create a cropped image for the region
@@ -57,14 +58,31 @@ class ProcessRegions implements ShouldQueue
                 $tempFileName = 'ocr/temp_region_' . $region['id'] . '_' . uniqid() . '.png';
                 $tempPath = Storage::disk('public')->path($tempFileName);
                 
-                // Ensure directory exists
+                // ADDED: Save the cropped image permanently for display
+                $permanentFileName = 'ocr/cropped/' . $ocrResult->id . '/page_' . $this->currentPage . '_region_' . $region['id'] . '.png';
+                $permanentPath = Storage::disk('public')->path($permanentFileName);
+                
+                // Ensure directories exist
                 $tempDir = dirname($tempPath);
                 if (!is_dir($tempDir)) {
                     mkdir($tempDir, 0755, true);
                 }
                 
-                // Save the cropped image
+                $permanentDir = dirname($permanentPath);
+                if (!is_dir($permanentDir)) {
+                    mkdir($permanentDir, 0755, true);
+                }
+                
+                // Save the cropped image (both temp and permanent)
                 $croppedImage->save($tempPath);
+                $croppedImage->save($permanentPath);
+                
+                // ADDED: Store permanent image path
+                $croppedImages[] = [
+                    'region_id' => $region['id'],
+                    'page' => $this->currentPage,
+                    'path' => $permanentFileName
+                ];
 
                 // Process the region with Tesseract using TSV format with improved configuration
                 $tesseract = new TesseractOCR($tempPath);
@@ -100,20 +118,28 @@ class ProcessRegions implements ShouldQueue
 
             // UPDATED: Merge results with existing OCR results for other pages
             $existingResults = $ocrResult->ocr_results ?? [];
+            $existingCroppedImages = $ocrResult->cropped_images ?? []; // ADDED: Get existing cropped images
             
             // Remove existing results for this page
             $existingResults = array_filter($existingResults, function($result) {
                 return !isset($result['page']) || $result['page'] != $this->currentPage;
             });
             
+            // ADDED: Remove existing cropped images for this page
+            $existingCroppedImages = array_filter($existingCroppedImages, function($image) {
+                return !isset($image['page']) || $image['page'] != $this->currentPage;
+            });
+            
             // Add new results for this page
             $allResults = array_merge($existingResults, $results);
+            $allCroppedImages = array_merge($existingCroppedImages, $croppedImages); // ADDED: Merge cropped images
 
             // Update the OCR result
             $ocrResult->update([
                 'status' => 'done',
                 'selected_regions' => $this->regions,
-                'ocr_results' => $allResults
+                'ocr_results' => $allResults,
+                'cropped_images' => $allCroppedImages // ADDED: Save cropped images
             ]);
 
         } catch (\Exception $e) {

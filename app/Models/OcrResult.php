@@ -17,6 +17,7 @@ class OcrResult extends Model
         'image_paths', // Store multiple image paths for multi-page PDFs
         'ocr_results',
         'selected_regions', // ADDED: Store selected regions data
+        'cropped_images', // ADDED: Store cropped images paths
     ];
 
     // Helper method to get all image paths
@@ -52,6 +53,12 @@ class OcrResult extends Model
 
     // ADDED: Helper method to get OCR results
     public function getOcrResultsAttribute($value)
+    {
+        return $value ? json_decode($value, true) : [];
+    }
+
+    // ADDED: Helper method to get cropped images
+    public function getCroppedImagesAttribute($value)
     {
         return $value ? json_decode($value, true) : [];
     }
