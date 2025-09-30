@@ -812,6 +812,12 @@
                     page: region.page
                 }));
 
+                // ADDED: Capture preview image dimensions for coordinate scaling
+                const previewDimensions = {
+                    width: this.previewImage.clientWidth,
+                    height: this.previewImage.clientHeight
+                };
+
                 // Send to server
                 fetch('{{ route("ocr.process-regions", $ocrResult->id) }}', {
                     method: 'POST',
@@ -820,7 +826,8 @@
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     },
                     body: JSON.stringify({
-                        regions: regionsData
+                        regions: regionsData,
+                        previewDimensions: previewDimensions // ADDED: Include preview dimensions
                     })
                 })
                 .then(response => response.json())

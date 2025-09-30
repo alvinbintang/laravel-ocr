@@ -31,21 +31,30 @@ class ProcessRegions implements ShouldQueue
 
     public function handle(): void
     {
-        $ocrResult = OcrResult::find($this->ocrResultId);
-        if (!$ocrResult) {
-            return;
-        }
-
         try {
-            // UPDATED: Get image path for specific page
-            $imagePath = $this->getImagePathForPage($ocrResult, $this->currentPage);
-            if (!$imagePath) {
+            $ocrResult = OcrResult::findOrFail($this->ocrResultId);
+            
+            // ADDED: Debug logging for preview dimensions
+            \Log::info("ProcessRegions started", [
+                'ocr_result_id' => $this->ocrResultId,
+                'current_page' => $this->currentPage,
+                'preview_dimensions' => $this->previewDimensions,
+                'regions_count' => count($this->regions)
+            ]);
+
+            // Get the image path for the specific page
+            $imagePaths = $ocrResult->image_paths ?? [];
+            if (!isset($imagePaths[$this->currentPage - 1])) {
                 throw new \Exception("Image not found for page {$this->currentPage}");
             }
 
-            $image = Image::read($imagePath);
+            $imagePath = storage_path('app/public/' . $imagePaths[$this->currentPage - 1]);
+            
+            // Initialize arrays for results and cropped images
             $results = [];
-            $croppedImages = []; // ADDED: Store cropped image paths
+            $croppedImages = [];
+
+            $image = Image::read($imagePath);
 
             // ADDED: Get actual OCR image dimensions for coordinate scaling
             $ocrImageWidth = $image->width();

@@ -97,6 +97,9 @@ class OcrController extends Controller
                 'regions.*.width' => 'required|numeric',
                 'regions.*.height' => 'required|numeric',
                 'regions.*.page' => 'required|integer|min:1', // UPDATED: Validate page for each region
+                'previewDimensions' => 'nullable|array', // ADDED: Validate preview dimensions
+                'previewDimensions.width' => 'nullable|numeric|min:1', // ADDED: Validate preview width
+                'previewDimensions.height' => 'nullable|numeric|min:1', // ADDED: Validate preview height
             ]);
 
             $ocrResult = OcrResult::findOrFail($id);
@@ -107,9 +110,12 @@ class OcrController extends Controller
             // Group regions by page
             $regionsByPage = collect($request->regions)->groupBy('page')->toArray();
             
+            // ADDED: Get preview dimensions from request
+            $previewDimensions = $request->input('previewDimensions');
+            
             // Process each page's regions separately
             foreach ($regionsByPage as $page => $regions) {
-                ProcessRegions::dispatch($ocrResult->id, $regions, (int)$page);
+                ProcessRegions::dispatch($ocrResult->id, $regions, (int)$page, $previewDimensions); // UPDATED: Pass preview dimensions
             }
 
             return response()->json([
