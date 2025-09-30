@@ -19,12 +19,14 @@ class ProcessRegions implements ShouldQueue
     protected $ocrResultId;
     protected $regions;
     protected $currentPage; // ADDED: Track current page
+    protected $previewDimensions; // ADDED: Store preview dimensions for scaling
 
-    public function __construct($ocrResultId, array $regions, int $currentPage = 1)
+    public function __construct($ocrResultId, array $regions, int $currentPage = 1, array $previewDimensions = null)
     {
         $this->ocrResultId = $ocrResultId;
         $this->regions = $regions;
         $this->currentPage = $currentPage; // ADDED: Store current page
+        $this->previewDimensions = $previewDimensions; // ADDED: Store preview dimensions
     }
 
     public function handle(): void
@@ -45,17 +47,41 @@ class ProcessRegions implements ShouldQueue
             $results = [];
             $croppedImages = []; // ADDED: Store cropped image paths
 
+            // ADDED: Get actual OCR image dimensions for coordinate scaling
+            $ocrImageWidth = $image->width();
+            $ocrImageHeight = $image->height();
+
             foreach ($this->regions as $region) {
-                // Create a cropped image for the region
+                // ADDED: Scale coordinates from preview to OCR image dimensions
+                $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
+
+                // Create a cropped image for the region using scaled coordinates
                 // FIXED: Updated for Intervention Image v3 syntax
                 // crop(width, height, offset_x, offset_y, position: 'top-left')
                 $croppedImage = $image->crop(
-                    $region['width'],
-                    $region['height'],
-                    $region['x'],
-                    $region['y'],
+                    $scaledRegion['width'],
+                    $scaledRegion['height'],
+                    $scaledRegion['x'],
+                    $scaledRegion['y'],
                     position: 'top-left'
                 );
+                
+                // ADDED: Save cropped image for debugging
+                $debugPath = storage_path('app/public/ocr/cropped');
+                if (!file_exists($debugPath)) {
+                    mkdir($debugPath, 0755, true);
+                }
+                
+                $debugFilename = "region_{$region['id']}_" . time() . "_" . uniqid() . ".png";
+                $debugFullPath = $debugPath . '/' . $debugFilename;
+                $croppedImage->save($debugFullPath);
+                
+                \Log::info("Cropped image saved for debugging", [
+                    'original_coords' => $region,
+                    'scaled_coords' => $scaledRegion,
+                    'debug_path' => $debugFullPath,
+                    'image_dimensions' => ['width' => $image->width(), 'height' => $image->height()]
+                ]);
 
                 // Save the cropped image temporarily with unique name
                 $tempFileName = 'ocr/temp_region_' . $region['id'] . '_' . uniqid() . '.png';
@@ -87,26 +113,107 @@ class ProcessRegions implements ShouldQueue
                     'path' => $permanentFileName
                 ];
 
-                // Process the region with Tesseract using TSV format with improved configuration
-                $tesseract = new TesseractOCR($tempPath);
-                $tesseract->lang('ind+eng')
-                    ->psm(6) // Page segmentation mode: Assume a single uniform block of text
-                    ->oem(1) // OCR Engine mode: Neural nets LSTM only
-                    ->format('tsv')
-                    ->config('tessedit_char_whitelist', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,;:\'"-()[]{}!?@#$%^&*+=<>/\\| ')
-                    ->dpi(300); // Higher DPI for better recognition
-                
-                // Run OCR
-                $tsv = $tesseract->run();
+                // UPDATED: OCR processing with fallback configurations for better table reading
+                try {
+                    // Primary configuration: PSM 6 (single uniform block of text)
+                    $tesseract = new TesseractOCR($tempPath);
+                    $tesseract->lang('ind+eng')
+                        ->psm(6) // Page segmentation mode: Assume a single uniform block of text
+                        ->oem(1) // OCR Engine mode: Neural nets LSTM only
+                        ->format('tsv')
+                        ->config('tessedit_char_whitelist', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,;:\'"-()\[\]{}!?@#$%^&*+=<>/\\| ')
+                        ->dpi(300); // Higher DPI for better recognition
+                    
+                    // Run OCR
+                    $tsv = $tesseract->run();
+                    
+                    // ADDED: Parse TSV output to maintain table structure
+                    $text = $this->parseTsvOutput($tsv);
+                    
+                    // Check if we got reasonable results (minimum text length)
+                    if (strlen(trim($text)) < 3) {
+                        throw new \Exception("Insufficient text detected with PSM 6");
+                    }
+                    
+                    \Log::info("OCR successful with PSM 6", [
+                        'region_id' => $region['id'],
+                        'text_length' => strlen($text)
+                    ]);
+                    
+                } catch (\Exception $e) {
+                    \Log::warning("OCR failed with PSM 6, trying PSM 4", [
+                        'region_id' => $region['id'],
+                        'error' => $e->getMessage()
+                    ]);
+                    
+                    try {
+                        // ADDED: Fallback 1: PSM 4 (single column of text of variable sizes)
+                        $tesseract = new TesseractOCR($tempPath);
+                        $tesseract->lang('ind+eng')
+                            ->psm(4)
+                            ->oem(1)
+                            ->format('tsv')
+                            ->config('tessedit_char_whitelist', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,;:\'"-()\[\]{}!?@#$%^&*+=<>/\\| ')
+                            ->dpi(300);
+                        
+                        $tsv = $tesseract->run();
+                        $text = $this->parseTsvOutput($tsv);
+                        
+                        if (strlen(trim($text)) < 3) {
+                            throw new \Exception("Insufficient text detected with PSM 4");
+                        }
+                        
+                        \Log::info("OCR successful with PSM 4 fallback", [
+                            'region_id' => $region['id'],
+                            'text_length' => strlen($text)
+                        ]);
+                        
+                    } catch (\Exception $e2) {
+                        \Log::warning("OCR failed with PSM 4, trying PSM 11", [
+                            'region_id' => $region['id'],
+                            'error' => $e2->getMessage()
+                        ]);
+                        
+                        try {
+                            // ADDED: Fallback 2: PSM 11 (sparse text)
+                            $tesseract = new TesseractOCR($tempPath);
+                            $tesseract->lang('ind+eng')
+                                ->psm(11)
+                                ->oem(1)
+                                ->format('tsv')
+                                ->config('tessedit_char_whitelist', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,;:\'"-()\[\]{}!?@#$%^&*+=<>/\\| ')
+                                ->dpi(300);
+                            
+                            $tsv = $tesseract->run();
+                            $text = $this->parseTsvOutput($tsv);
+                            
+                            \Log::info("OCR completed with PSM 11 fallback", [
+                                'region_id' => $region['id'],
+                                'text_length' => strlen($text)
+                            ]);
+                            
+                        } catch (\Exception $e3) {
+                            \Log::error("All OCR configurations failed", [
+                                'region_id' => $region['id'],
+                                'errors' => [$e->getMessage(), $e2->getMessage(), $e3->getMessage()]
+                            ]);
+                            
+                            $text = "OCR processing failed for this region";
+                        }
+                    }
+                }
 
-                // Parse TSV output to extract text with improved confidence handling
-                $text = $this->parseTsvOutput($tsv);
-
-                // UPDATED: Add page information to results
+                // UPDATED: Add page information to results with scaled coordinates
                 $results[] = [
                     'region_id' => $region['id'],
                     'page' => $this->currentPage, // ADDED: Page information
                     'coordinates' => [
+                        'x' => $scaledRegion['x'], // UPDATED: Use scaled coordinates
+                        'y' => $scaledRegion['y'], // UPDATED: Use scaled coordinates
+                        'width' => $scaledRegion['width'], // UPDATED: Use scaled coordinates
+                        'height' => $scaledRegion['height'] // UPDATED: Use scaled coordinates
+                    ],
+                    'original_coordinates' => [ // ADDED: Keep original preview coordinates for reference
                         'x' => $region['x'],
                         'y' => $region['y'],
                         'width' => $region['width'],
@@ -172,13 +279,37 @@ class ProcessRegions implements ShouldQueue
         return null;
     }
 
-    // Improved method to parse TSV output from Tesseract with better text structure preservation
+    // ADDED: Helper method to scale coordinates from preview to OCR image dimensions
+    private function scaleCoordinates(array $region, int $ocrImageWidth, int $ocrImageHeight): array
+    {
+        // If no preview dimensions provided, return original coordinates (fallback)
+        if (!$this->previewDimensions || !isset($this->previewDimensions['width']) || !isset($this->previewDimensions['height'])) {
+            return $region;
+        }
+
+        $previewWidth = $this->previewDimensions['width'];
+        $previewHeight = $this->previewDimensions['height'];
+
+        // Calculate scaling factors
+        $scaleX = $ocrImageWidth / $previewWidth;
+        $scaleY = $ocrImageHeight / $previewHeight;
+
+        // Apply scaling to coordinates
+        return [
+            'id' => $region['id'],
+            'x' => (int) round($region['x'] * $scaleX),
+            'y' => (int) round($region['y'] * $scaleY),
+            'width' => (int) round($region['width'] * $scaleX),
+            'height' => (int) round($region['height'] * $scaleY),
+            'page' => $region['page'] ?? $this->currentPage
+        ];
+    }
+
+    // UPDATED: Improved method to parse TSV output from Tesseract with line-based grouping for table structure
     private function parseTsvOutput(string $tsv): string
     {
         $lines = explode("\n", trim($tsv));
-        $result = [];
-        $currentLine = -1;
-        $currentParagraph = -1;
+        $lineGroups = []; // UPDATED: Group text by line_num for table structure
         
         // Skip header line and process data lines
         for ($i = 1; $i < count($lines); $i++) {
@@ -189,34 +320,70 @@ class ProcessRegions implements ShouldQueue
                 $level = (int)$columns[0];
                 $parNum = (int)$columns[3];
                 $lineNum = (int)$columns[4];
+                $wordNum = (int)$columns[5];
+                $left = (int)$columns[6];
+                $top = (int)$columns[7];
                 $confidence = (int)$columns[10];
                 $wordText = trim($columns[11]);
                 
-                // Only include words with reasonable confidence (> 40)
-                if ($confidence > 40 && !empty($wordText)) {
-                    // Track paragraph and line changes to preserve structure
-                    if ($parNum !== $currentParagraph) {
-                        $currentParagraph = $parNum;
-                        if (!empty($result)) {
-                            $result[] = "\n\n"; // Double newline for paragraph breaks
-                        }
-                    } elseif ($lineNum !== $currentLine) {
-                        $currentLine = $lineNum;
-                        if (!empty($result)) {
-                            $result[] = "\n"; // Single newline for line breaks
-                        }
-                    } else {
-                        // Add space between words on the same line
-                        if (!empty($result)) {
-                            $result[] = " ";
-                        }
+                // Only include words with reasonable confidence (> 30 for better table capture)
+                if ($confidence > 30 && !empty($wordText) && $level === 5) { // Level 5 = word level
+                    // UPDATED: Group by line_num to maintain table row structure
+                    if (!isset($lineGroups[$lineNum])) {
+                        $lineGroups[$lineNum] = [];
                     }
                     
-                    $result[] = $wordText;
+                    // Store word with position for proper ordering within line
+                    $lineGroups[$lineNum][] = [
+                        'text' => $wordText,
+                        'left' => $left,
+                        'top' => $top,
+                        'confidence' => $confidence,
+                        'word_num' => $wordNum
+                    ];
                 }
             }
         }
         
-        return trim(implode('', $result));
+        // UPDATED: Process each line group to maintain table structure
+        $result = [];
+        ksort($lineGroups); // Sort by line number
+        
+        foreach ($lineGroups as $lineNum => $words) {
+            if (empty($words)) continue;
+            
+            // Sort words by horizontal position (left coordinate) for proper column order
+            usort($words, function($a, $b) {
+                return $a['left'] <=> $b['left'];
+            });
+            
+            // Join words in the line with appropriate spacing
+            $lineText = '';
+            $lastRight = 0;
+            
+            foreach ($words as $word) {
+                // Add spacing based on horizontal gap between words
+                if ($lastRight > 0) {
+                    $gap = $word['left'] - $lastRight;
+                    if ($gap > 50) { // Large gap suggests column separation
+                        $lineText .= "\t"; // Use tab for column separation
+                    } elseif ($gap > 20) { // Medium gap
+                        $lineText .= "  "; // Double space
+                    } else {
+                        $lineText .= " "; // Single space
+                    }
+                }
+                
+                $lineText .= $word['text'];
+                $lastRight = $word['left'] + 50; // Approximate word width
+            }
+            
+            if (!empty(trim($lineText))) {
+                $result[] = trim($lineText);
+            }
+        }
+        
+        // UPDATED: Join lines with newlines to preserve table row structure
+        return implode("\n", $result);
     }
 }
