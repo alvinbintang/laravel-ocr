@@ -85,9 +85,23 @@
                             <div class="flex items-center justify-center py-8">
                                 <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
                             </div>
-                            <p class="text-center text-gray-600">
-                                Mohon tunggu sebentar, file Anda sedang diproses...
-                            </p>
+                            <div id="processing-message" class="text-center">
+                                <p class="text-gray-600 mb-2">
+                                    Mohon tunggu sebentar, file Anda sedang diproses...
+                                </p>
+                                <div id="extended-message" class="hidden">
+                                    <p class="text-amber-600 text-sm mb-4">
+                                        Proses ini membutuhkan waktu lebih lama dari biasanya. Mohon bersabar...
+                                    </p>
+                                    <button id="refresh-btn" onclick="window.location.reload()" 
+                                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                        </svg>
+                                        Refresh Halaman
+                                    </button>
+                                </div>
+                            </div>
                             @endif
 
                             @if($ocrResult->status === 'error')
@@ -110,8 +124,22 @@
     @if($ocrResult->status === 'pending' || $ocrResult->status === 'processing')
     <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // ADDED: Timer untuk menampilkan pesan extended setelah 5 detik
+        let startTime = Date.now();
+        let extendedMessageShown = false;
+        
+        const showExtendedMessage = () => {
+            if (!extendedMessageShown && (Date.now() - startTime) >= 5000) {
+                document.getElementById('extended-message').classList.remove('hidden');
+                extendedMessageShown = true;
+            }
+        };
+        
         const checkStatus = async () => {
             try {
+                // Cek apakah sudah 5 detik untuk menampilkan pesan extended
+                showExtendedMessage();
+                
                 // UPDATED: Check status via API instead of redirect
                 const response = await fetch(`/ocr/{{ $ocrResult->id }}/status-check`, {
                     method: 'GET',
