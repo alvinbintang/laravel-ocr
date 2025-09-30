@@ -116,8 +116,8 @@
                 
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.status === 'done') {
-                        // ADDED: Redirect to preview page when processing is complete
+                    if (data.status === 'done' || data.status === 'awaiting_selection') {
+                        // ADDED: Redirect to preview page when processing is complete or awaiting selection
                         window.location.href = `/ocr/{{ $ocrResult->id }}/preview`;
                         return;
                     } else if (data.status === 'error') {
