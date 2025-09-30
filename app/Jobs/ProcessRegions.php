@@ -10,8 +10,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 use thiagoalessio\TesseractOCR\TesseractOCR;
-use Intervention\Image\ImageManager;
-use Intervention\Image\Drivers\Gd\Driver;
+use Intervention\Image\Laravel\Facades\Image;
 
 class ProcessRegions implements ShouldQueue
 {
@@ -55,9 +54,7 @@ class ProcessRegions implements ShouldQueue
             $results = [];
             $croppedImages = [];
 
-            // UPDATED: Create ImageManager instance for Intervention Image v3
-            $manager = new ImageManager(new Driver());
-            $image = $manager->read($imagePath);
+            $image = Image::read($imagePath);
 
             // ADDED: Get actual OCR image dimensions for coordinate scaling
             $ocrImageWidth = $image->width();
