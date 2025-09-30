@@ -134,6 +134,9 @@
                             <div class="flex justify-between items-center mb-4">
                                 <h3 class="text-lg font-medium">OCR Results</h3>
                                 <div class="flex space-x-2">
+                                    <button id="convert-to-json-btn" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                        Convert to Structured JSON
+                                    </button>
                                     <a href="{{ route('ocr.export', $ocrResult->id) }}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium">
                                         Export to Excel
                                     </a>
@@ -935,7 +938,190 @@
                     });
                 });
             }
+
+            // ADDED: JSON Conversion functionality
+            const convertToJsonBtn = document.getElementById('convert-to-json-btn');
+            if (convertToJsonBtn) {
+                convertToJsonBtn.addEventListener('click', function() {
+                    convertOcrToStructuredJson();
+                });
+            }
         });
+
+        // ADDED: OCR to Structured JSON Conversion Function
+        function convertOcrToStructuredJson() {
+            // Get OCR results from the page
+            const ocrResults = @json($ocrResult->ocr_results ?? []);
+            
+            if (!ocrResults || ocrResults.length === 0) {
+                alert('Tidak ada hasil OCR yang tersedia untuk dikonversi.');
+                return;
+            }
+
+            // Parse each page/region
+            const parsedResults = ocrResults.map((result, index) => {
+                return parsePage(result.text || '', index + 1, result.page || 1);
+            });
+
+            // Combine all results into a single structured JSON
+            const combinedResult = {
+                metadata: {
+                    total_pages: parsedResults.length,
+                    conversion_date: new Date().toISOString(),
+                    source_file: '{{ $ocrResult->filename ?? "unknown" }}'
+                },
+                documents: parsedResults
+            };
+
+            // Display the result in a modal
+            showJsonModal(combinedResult);
+        }
+
+        // ADDED: Parse individual page function
+        function parsePage(text, regionIndex, pageNumber) {
+            const data = {
+                region_id: regionIndex,
+                page_number: pageNumber,
+                bidang: null,
+                sub_bidang: null,
+                kegiatan: null,
+                waktu_pelaksanaan: null,
+                output_keluaran: null,
+                belanja: []
+            };
+
+            if (!text || text.trim() === '') {
+                return data;
+            }
+
+            // Header detection with improved regex patterns
+            const bidangMatch = text.match(/Bidang\s*:?\s*(.+?)(?:\n|$)/i);
+            if (bidangMatch) data.bidang = bidangMatch[1].trim();
+
+            const subMatch = text.match(/Sub\s*Bidang\s*:?\s*(.+?)(?:\n|$)/i);
+            if (subMatch) data.sub_bidang = subMatch[1].trim();
+
+            const kegMatch = text.match(/Kegiatan\s*:?\s*(.+?)(?:\n|$)/i);
+            if (kegMatch) data.kegiatan = kegMatch[1].trim();
+
+            const waktuMatch = text.match(/Waktu\s*Pelaksanaan\s*:?\s*(.+?)(?:\n|$)/i);
+            if (waktuMatch) data.waktu_pelaksanaan = waktuMatch[1].trim();
+
+            const outMatch = text.match(/Output\/Keluaran\s*:?\s*(.+?)(?:\n|$)/i);
+            if (outMatch) data.output_keluaran = outMatch[1].trim();
+
+            // Belanja/Table parsing
+            const lines = text.split("\n").map(l => l.trim()).filter(l => l);
+            
+            lines.forEach(line => {
+                // Detect table rows with price format and DDS
+                if (/\d{1,3}(\.\d{3})*,\d{2}/.test(line) && /DDS/i.test(line)) {
+                    // Try structured parsing first
+                    const parts = line.split(/\s{2,}|\t/).filter(Boolean);
+                    if (parts.length >= 5) {
+                        data.belanja.push({
+                            kode: parts[0].replace(/\.$/, ""),
+                            uraian: parts[1],
+                            volume: parts[2],
+                            harga_satuan: parts[3],
+                            jumlah: parts[4]
+                        });
+                    } else {
+                        // Fallback parsing for messy OCR
+                        const tokens = line.split(/\s+/);
+                        const priceTokens = tokens.filter(t => /\d{1,3}(\.\d{3})*,\d{2}/.test(t));
+                        if (priceTokens.length >= 2) {
+                            const kodeIndex = 0;
+                            const hargaIndex = tokens.lastIndexOf(priceTokens[priceTokens.length - 2]);
+                            const jumlahIndex = tokens.lastIndexOf(priceTokens[priceTokens.length - 1]);
+                            const volumeIndex = hargaIndex - 1;
+                            
+                            data.belanja.push({
+                                kode: tokens[kodeIndex] || '',
+                                uraian: tokens.slice(1, volumeIndex).join(" ") || '',
+                                volume: tokens[volumeIndex] || '',
+                                harga_satuan: tokens[hargaIndex] || '',
+                                jumlah: tokens[jumlahIndex] || ''
+                            });
+                        }
+                    }
+                }
+            });
+
+            return data;
+        }
+
+        // ADDED: Show JSON result in modal
+        function showJsonModal(jsonData) {
+            // Create modal HTML
+            const modalHtml = `
+                <div id="json-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+                        <div class="flex justify-between items-center p-6 border-b">
+                            <h3 class="text-lg font-medium">Structured JSON Result</h3>
+                            <div class="flex space-x-2">
+                                <button id="copy-json-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                    Copy JSON
+                                </button>
+                                <button id="download-json-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                    Download JSON
+                                </button>
+                                <button id="close-modal-btn" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-auto p-6">
+                            <pre id="json-content" class="bg-gray-800 text-white p-4 rounded-md text-sm overflow-auto">${JSON.stringify(jsonData, null, 2)}</pre>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            // Add event listeners
+            document.getElementById('close-modal-btn').addEventListener('click', function() {
+                document.getElementById('json-modal').remove();
+            });
+
+            document.getElementById('copy-json-btn').addEventListener('click', function() {
+                const jsonText = JSON.stringify(jsonData, null, 2);
+                navigator.clipboard.writeText(jsonText).then(function() {
+                    alert('JSON berhasil disalin ke clipboard!');
+                }).catch(function() {
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = jsonText;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('JSON berhasil disalin ke clipboard!');
+                });
+            });
+
+            document.getElementById('download-json-btn').addEventListener('click', function() {
+                const jsonText = JSON.stringify(jsonData, null, 2);
+                const blob = new Blob([jsonText], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `structured_ocr_${new Date().getTime()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+
+            // Close modal when clicking outside
+            document.getElementById('json-modal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.remove();
+                }
+            });
+        }
     </script>
 </body>
 </html>
