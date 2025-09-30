@@ -47,11 +47,14 @@ class ProcessRegions implements ShouldQueue
 
             foreach ($this->regions as $region) {
                 // Create a cropped image for the region
+                // FIXED: Updated for Intervention Image v3 syntax
+                // crop(width, height, offset_x, offset_y, position: 'top-left')
                 $croppedImage = $image->crop(
                     $region['width'],
                     $region['height'],
                     $region['x'],
-                    $region['y']
+                    $region['y'],
+                    position: 'top-left'
                 );
 
                 // Save the cropped image temporarily with unique name
