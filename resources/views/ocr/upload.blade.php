@@ -47,6 +47,26 @@
                         <form action="{{ route('ocr.extract') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
                             @csrf
                             <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Pilih Jenis Dokumen
+                                </label>
+                                <div class="flex space-x-4 mb-4">
+                                    <div class="flex items-center">
+                                        <input id="document_type_rab" name="document_type" type="radio" value="RAB" class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500" checked>
+                                        <label for="document_type_rab" class="ml-2 block text-sm text-gray-700">
+                                            RAB (Rencana Anggaran Biaya)
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input id="document_type_rka" name="document_type" type="radio" value="RKA" class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500">
+                                        <label for="document_type_rka" class="ml-2 block text-sm text-gray-700">
+                                            RKA (Rencana Kerja dan Anggaran)
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700">
                                     Pilih file PDF (maksimal 20MB)
                                 </label>

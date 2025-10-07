@@ -24,7 +24,7 @@ class OcrController extends Controller
 
     public function extract(OcrExtractRequest $request)
     {
-        $result = $this->ocrService->processPdfUpload($request->file('pdf')); // UPDATED: get array result
+        $result = $this->ocrService->processPdfUpload($request->file('pdf'), $request->input('document_type')); // UPDATED: pass document_type
         
         return redirect()->route('ocr.preview', ['id' => $result['ocr_result_id']]) // UPDATED: use correct key
             ->with('success', $result['message']); // UPDATED: use message from result
@@ -156,5 +156,16 @@ class OcrController extends Controller
         };
         
         return response()->stream($callback, 200, $headers);
+    }
+    
+    public function saveRotations(Request $request, $id)
+    {
+        $rotations = $request->input('rotations');
+        $result = $this->ocrService->savePageRotations($id, $rotations);
+        
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['message']
+        ]);
     }
 }

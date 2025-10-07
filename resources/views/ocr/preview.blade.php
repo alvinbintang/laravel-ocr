@@ -34,6 +34,7 @@
                             <div>
                                 <h2 class="text-2xl font-bold">Preview & Select Regions</h2>
                                 <p class="text-gray-600">File: {{ $ocrResult->filename }}</p>
+                                <p class="text-gray-600">Jenis Dokumen: {{ $ocrResult->document_type }}</p>
                                 <p class="text-gray-600">
                                     Status: 
                                     @if($ocrResult->status === 'awaiting_selection')
@@ -105,6 +106,117 @@
 
                         <!-- Image Preview Container -->
                         <div class="relative mb-6" id="image-preview-container">
+                            <!-- Rotation Controls -->
+                            <div class="flex justify-end mb-2">
+                                <div class="flex space-x-2">
+                                    <button id="rotate-left-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                        </svg>
+                                        Rotate Left
+                                    </button>
+                                    <button id="rotate-right-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm flex items-center">
+                                        Rotate Right
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <script>
+                                // Initialize rotation variables
+                                let pageRotations = {!! json_encode($ocrResult->page_rotations ?? []) !!} || {};
+                                let currentPage = 1;
+                                
+                                // Wait for DOM to be fully loaded
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    const rotateLeftBtn = document.getElementById('rotate-left-btn');
+                                    const rotateRightBtn = document.getElementById('rotate-right-btn');
+                                    const previewImage = document.getElementById('preview-image');
+                                    
+                                    // Add event listeners for rotation buttons
+                                    if (rotateLeftBtn) {
+                                        rotateLeftBtn.addEventListener('click', function() {
+                                            rotateImage(-90);
+                                        });
+                                    }
+                                    
+                                    if (rotateRightBtn) {
+                                        rotateRightBtn.addEventListener('click', function() {
+                                            rotateImage(90);
+                                        });
+                                    }
+                                    
+                                    // Apply initial rotation if exists
+                                applyCurrentPageRotation();
+                                
+                                // Update currentPage when page changes in RegionSelector
+                                document.addEventListener('pageChanged', function(e) {
+                                    currentPage = e.detail.page;
+                                    applyCurrentPageRotation();
+                                });
+                            });
+                            
+                            // Function to rotate image
+                            function rotateImage(degrees) {
+                                const previewImage = document.getElementById('preview-image');
+                                if (!previewImage) return;
+                                
+                                // Get current rotation or default to 0
+                                const currentRotation = pageRotations[currentPage] || 0;
+                                
+                                // Calculate new rotation (normalize to 0-359)
+                                let newRotation = (currentRotation + degrees) % 360;
+                                if (newRotation < 0) newRotation += 360;
+                                
+                                // Update rotation value
+                                pageRotations[currentPage] = newRotation;
+                                
+                                // Apply rotation
+                                applyCurrentPageRotation();
+                                
+                                // Save rotations to server
+                                saveRotations();
+                            }
+                                
+                                // Apply rotation to current page
+                                function applyCurrentPageRotation() {
+                                    const previewImage = document.getElementById('preview-image');
+                                    if (!previewImage) return;
+                                    
+                                    const rotation = pageRotations[currentPage] || 0;
+                                    previewImage.style.transform = `rotate(${rotation}deg)`;
+                                    
+                                    // Update RegionSelector's currentPage if it exists
+                                    if (window.regionSelector && window.regionSelector.currentPage !== currentPage) {
+                                        window.regionSelector.currentPage = currentPage;
+                                    }
+                                }
+                                
+                                // Save rotations to server
+                                function saveRotations() {
+                                    fetch(`/ocr/{{ $ocrResult->id }}/save-rotations`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                                        },
+                                        body: JSON.stringify({
+                                            rotations: pageRotations
+                                        })
+                                    })
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        if (!data.success) {
+                                            console.error('Error saving rotations:', data.message);
+                                        }
+                                    })
+                                    .catch(error => {
+                                        console.error('Error saving rotations:', error);
+                                    });
+                                }
+                            </script>
                             <div id="image-container" class="relative border border-gray-300 rounded overflow-hidden">
                                 <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto" style="display: none;">
                                 <!-- UPDATED: Improved loading placeholder with spinner -->
@@ -528,6 +640,13 @@
                 
                 if (this.prevPageBtn) {
                     this.prevPageBtn.disabled = this.currentPage <= 1;
+                }
+                
+                // Apply rotation if exists for current page
+                if (this.pageRotations && this.pageRotations[this.currentPage]) {
+                    this.previewImage.style.transform = `rotate(${this.pageRotations[this.currentPage]}deg)`;
+                } else {
+                    this.previewImage.style.transform = 'rotate(0deg)';
                 }
                 
                 if (this.nextPageBtn) {
@@ -1125,3 +1244,104 @@
     </script>
 </body>
 </html>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Tambahkan variabel untuk rotasi
+        let pageRotations = {!! json_encode($ocrResult->page_rotations ?? []) !!};
+        
+        // Inisialisasi rotasi halaman jika belum diatur
+        if (!pageRotations || Object.keys(pageRotations).length === 0) {
+            pageRotations = {};
+            for (let i = 1; i <= totalPages; i++) {
+                pageRotations[i] = 0;
+            }
+        }
+        
+        // Tambahkan event listener untuk tombol rotasi
+        const rotateLeftBtn = document.getElementById('rotate-left-btn');
+        const rotateRightBtn = document.getElementById('rotate-right-btn');
+        
+        if (rotateLeftBtn) {
+            rotateLeftBtn.addEventListener('click', function() {
+                rotateImage(-90);
+            });
+        }
+        
+        if (rotateRightBtn) {
+            rotateRightBtn.addEventListener('click', function() {
+                rotateImage(90);
+            });
+        }
+        
+        // Fungsi untuk merotasi gambar
+        function rotateImage(degrees) {
+            // Dapatkan rotasi saat ini untuk halaman ini
+            const currentRotation = pageRotations[currentPage] || 0;
+            // Hitung rotasi baru (0, 90, 180, 270)
+            let newRotation = (currentRotation + degrees) % 360;
+            if (newRotation < 0) newRotation += 360;
+            
+            // Simpan rotasi baru
+            pageRotations[currentPage] = newRotation;
+            
+            // Terapkan rotasi ke gambar
+            applyRotation();
+            
+            // Simpan rotasi ke server
+            saveRotation();
+        }
+        
+        // Fungsi untuk menerapkan rotasi ke gambar
+        function applyRotation() {
+            const rotation = pageRotations[currentPage] || 0;
+            previewImage.style.transform = `rotate(${rotation}deg)`;
+            
+            // Sesuaikan container jika rotasi 90 atau 270 derajat
+            if (rotation === 90 || rotation === 270) {
+                previewImage.style.maxWidth = 'none';
+                previewImage.style.maxHeight = '100%';
+            } else {
+                previewImage.style.maxWidth = '100%';
+                previewImage.style.maxHeight = 'none';
+            }
+        }
+        
+        // Fungsi untuk menyimpan rotasi ke server
+        function saveRotation() {
+            fetch(`/ocr/{{ $ocrResult->id }}/save-rotations`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({
+                    page_rotations: pageRotations
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Rotation saved:', data);
+            })
+            .catch(error => {
+                console.error('Error saving rotation:', error);
+            });
+        }
+        
+        // Modifikasi fungsi loadCurrentPage untuk menerapkan rotasi
+        const originalLoadCurrentPage = loadCurrentPage;
+        loadCurrentPage = function() {
+            originalLoadCurrentPage.call(this);
+            // Terapkan rotasi setelah gambar dimuat
+            previewImage.onload = function() {
+                loadingPlaceholder.style.display = 'none';
+                previewImage.style.display = 'block';
+                applyRotation();
+                updateRegionsDisplay();
+            };
+        };
+        
+        // Update process button state based on total regions
+        this.updateProcessButton();
+    });
+</script>

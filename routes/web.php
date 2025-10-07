@@ -14,3 +14,4 @@ Route::get('/ocr/{id}/result', [OcrController::class, 'showResult'])->name('ocr.
 Route::get('/ocr/export/{id}', [ExcelExportController::class, 'exportToExcel'])->name('ocr.export');
 Route::get('/ocr/export-json/{id}', [OcrController::class, 'exportJson'])->name('ocr.export-json');
 Route::get('/ocr/export-csv/{id}', [OcrController::class, 'exportCsv'])->name('ocr.export-csv');
+Route::post('/ocr/{id}/save-rotations', [OcrController::class, 'saveRotations'])->name('ocr.save-rotations');

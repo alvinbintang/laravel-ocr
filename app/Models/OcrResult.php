@@ -11,6 +11,7 @@ class OcrResult extends Model
 
     protected $fillable = [
         'filename',
+        'document_type', // ADDED: Store document type (RAB or RKA)
         'text',
         'status',
         'image_path',
@@ -18,6 +19,7 @@ class OcrResult extends Model
         'ocr_results',
         'selected_regions', // ADDED: Store selected regions data
         'cropped_images', // ADDED: Store cropped images paths
+        'page_rotations', // ADDED: Store page rotation angles
     ];
 
     // Helper method to get all image paths
@@ -35,6 +37,12 @@ class OcrResult extends Model
 
     // ADDED: Helper method to get selected regions
     public function getSelectedRegionsAttribute($value)
+    {
+        return $value ? json_decode($value, true) : [];
+    }
+    
+    // ADDED: Helper method to get page rotations
+    public function getPageRotationsAttribute($value)
     {
         return $value ? json_decode($value, true) : [];
     }

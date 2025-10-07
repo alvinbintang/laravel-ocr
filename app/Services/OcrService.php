@@ -32,17 +32,19 @@ class OcrService
      * Process PDF upload and create OCR result
      *
      * @param UploadedFile $pdfFile
+     * @param string $documentType
      * @return array
      * @throws \Exception
      */
-    public function processPdfUpload(UploadedFile $pdfFile): array
+    public function processPdfUpload(UploadedFile $pdfFile, string $documentType = 'RAB'): array
     {
         // Log upload information
         Log::info('PDF Upload Details', [
             'original_name' => $pdfFile->getClientOriginalName(),
             'mime_type' => $pdfFile->getMimeType(),
             'size' => $pdfFile->getSize(),
-            'error' => $pdfFile->getError()
+            'error' => $pdfFile->getError(),
+            'document_type' => $documentType
         ]);
 
         // Additional PDF validation
@@ -57,7 +59,9 @@ class OcrService
         // Simpan informasi ke database
         $ocrResult = $this->ocrResultRepository->create([
             'filename' => basename($path),
+            'document_type' => $documentType,
             'status' => 'pending',
+            'page_rotations' => json_encode([]),
         ]);
 
         // Dispatch job ke antrian untuk konversi PDF ke image
@@ -260,5 +264,41 @@ class OcrService
             'headers' => ['Page', 'Region ID', 'X', 'Y', 'Width', 'Height', 'Text'],
             'data' => $csvData
         ];
+    }
+    
+    /**
+     * Save page rotations for OCR result
+     *
+     * @param int $id
+     * @param array $rotations
+     * @return array
+     */
+    public function savePageRotations(int $id, array $rotations): array
+    {
+        $ocrResult = $this->ocrResultRepository->findById($id);
+        
+        if (!$ocrResult) {
+            return [
+                'success' => false,
+                'message' => 'OCR result not found'
+            ];
+        }
+        
+        try {
+            $this->ocrResultRepository->update($id, [
+                'page_rotations' => json_encode($rotations)
+            ]);
+            
+            return [
+                'success' => true,
+                'message' => 'Page rotations saved successfully'
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error saving page rotations: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Error saving page rotations'
+            ];
+        }
     }
 }
