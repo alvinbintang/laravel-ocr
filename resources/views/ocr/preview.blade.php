@@ -1306,67 +1306,45 @@
             const rotation = pageRotations[currentPage] || 0;
             const imageContainer = document.getElementById('image-container');
             
-            // Reset container styles
+            // Reset styles
             imageContainer.style.height = '';
             imageContainer.style.width = '';
-            imageContainer.style.overflow = 'visible';
-            imageContainer.style.display = 'flex';
-            imageContainer.style.justifyContent = 'center';
-            imageContainer.style.alignItems = 'center';
-            
-            // Reset image styles
-            previewImage.style.position = '';
-            previewImage.style.top = '';
-            previewImage.style.left = '';
-            previewImage.style.maxWidth = '';
-            previewImage.style.maxHeight = '';
-            previewImage.style.width = '';
-            previewImage.style.height = '';
-            
-            // Apply rotation
+            previewImage.style.maxWidth = '100%';
+            previewImage.style.maxHeight = 'none';
             previewImage.style.transform = `rotate(${rotation}deg)`;
             
-            // Tunggu sebentar untuk memastikan gambar sudah dimuat
-            setTimeout(() => {
-                const containerRect = imageContainer.getBoundingClientRect();
-                const imgRect = previewImage.getBoundingClientRect();
-                
-                // Hitung ukuran yang dibutuhkan untuk menampung gambar yang dirotasi
-                let requiredWidth, requiredHeight;
-                
-                if (rotation === 90 || rotation === 270) {
-                    // Untuk rotasi 90/270 derajat, tukar dimensi
-                    requiredWidth = previewImage.naturalHeight;
-                    requiredHeight = previewImage.naturalWidth;
-                } else {
-                    // Untuk rotasi 0/180 derajat, gunakan dimensi normal
-                    requiredWidth = previewImage.naturalWidth;
-                    requiredHeight = previewImage.naturalHeight;
-                }
-                
-                // Hitung skala yang sesuai dengan container parent
-                const parentContainer = imageContainer.parentElement;
-                const maxWidth = parentContainer.clientWidth - 40; // margin
-                const maxHeight = window.innerHeight * 0.7;
-                
-                const scaleX = maxWidth / requiredWidth;
-                const scaleY = maxHeight / requiredHeight;
-                const scale = Math.min(scaleX, scaleY, 1); // tidak lebih dari ukuran asli
-                
-                // Terapkan ukuran yang sudah diskalakan
-                previewImage.style.width = `${previewImage.naturalWidth * scale}px`;
-                previewImage.style.height = `${previewImage.naturalHeight * scale}px`;
-                
-                // Atur container untuk menampung gambar yang dirotasi
-                imageContainer.style.width = `${requiredWidth * scale}px`;
-                imageContainer.style.height = `${requiredHeight * scale}px`;
-                imageContainer.style.margin = '0 auto';
-                
-                // Update RegionSelector jika ada
-                if (window.regionSelector) {
-                    window.regionSelector.updateImageDimensions();
-                }
-            }, 100);
+            // Sesuaikan container jika rotasi 90 atau 270 derajat
+            if (rotation === 90 || rotation === 270) {
+                // Tunggu gambar dimuat untuk mendapatkan dimensi yang benar
+                setTimeout(() => {
+                    const imgWidth = previewImage.naturalWidth;
+                    const imgHeight = previewImage.naturalHeight;
+                    
+                    if (imgWidth && imgHeight) {
+                        // Jika rotasi 90/270 derajat, tukar dimensi untuk container
+                        const containerWidth = Math.min(window.innerWidth * 0.8, imgHeight);
+                        const containerHeight = Math.min(window.innerHeight * 0.7, imgWidth);
+                        
+                        // Atur ukuran container untuk menampung gambar yang dirotasi
+                        imageContainer.style.width = `${containerWidth}px`;
+                        imageContainer.style.height = `${containerHeight}px`;
+                        
+                        // Posisikan gambar di tengah container
+                        previewImage.style.position = 'absolute';
+                        previewImage.style.top = '50%';
+                        previewImage.style.left = '50%';
+                        previewImage.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
+                        previewImage.style.maxWidth = 'none';
+                        previewImage.style.maxHeight = '100%';
+                    }
+                }, 50);
+            } else {
+                // Untuk rotasi 0 atau 180 derajat, gunakan layout normal
+                previewImage.style.position = '';
+                previewImage.style.top = '';
+                previewImage.style.left = '';
+                previewImage.style.transform = `rotate(${rotation}deg)`;
+            }
         }
         
         // Fungsi untuk menyimpan rotasi ke server

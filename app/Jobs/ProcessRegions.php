@@ -75,11 +75,8 @@ class ProcessRegions implements ShouldQueue
             $ocrImageHeight = $image->height();
 
             foreach ($this->regions as $region) {
-                // Transform coordinates if image was rotated
-                $transformedRegion = $this->transformCoordinatesForRotation($region, $ocrImageWidth, $ocrImageHeight);
-                
                 // ADDED: Scale coordinates from preview to OCR image dimensions
-                $scaledRegion = $this->scaleCoordinates($transformedRegion, $ocrImageWidth, $ocrImageHeight);
+                $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
 
                 // Create a cropped image for the region using scaled coordinates
                 // FIXED: Updated for Intervention Image v3 syntax
@@ -104,11 +101,9 @@ class ProcessRegions implements ShouldQueue
                 
                 \Log::info("Cropped image saved for debugging", [
                     'original_coords' => $region,
-                    'transformed_coords' => $transformedRegion,
                     'scaled_coords' => $scaledRegion,
                     'debug_path' => $debugFullPath,
-                    'image_dimensions' => ['width' => $image->width(), 'height' => $image->height()],
-                    'rotation' => $region['rotation'] ?? 0
+                    'image_dimensions' => ['width' => $image->width(), 'height' => $image->height()]
                 ]);
 
                 // Save the cropped image temporarily with unique name
@@ -413,62 +408,5 @@ class ProcessRegions implements ShouldQueue
         
         // UPDATED: Join lines with newlines to preserve table row structure
         return implode("\n", $result);
-    }
-
-    /**
-     * Transform coordinates based on image rotation
-     */
-    private function transformCoordinatesForRotation($region, $imageWidth, $imageHeight)
-    {
-        $rotation = $region['rotation'] ?? 0;
-        
-        if ($rotation == 0) {
-            return $region; // No transformation needed
-        }
-        
-        $x = $region['x'];
-        $y = $region['y'];
-        $width = $region['width'];
-        $height = $region['height'];
-        
-        // Transform coordinates based on rotation
-        switch ($rotation) {
-            case 90:
-                // 90 degrees clockwise: (x,y) -> (y, imageWidth-x-width)
-                $newX = $y;
-                $newY = $imageWidth - $x - $width;
-                $newWidth = $height;
-                $newHeight = $width;
-                break;
-                
-            case 180:
-                // 180 degrees: (x,y) -> (imageWidth-x-width, imageHeight-y-height)
-                $newX = $imageWidth - $x - $width;
-                $newY = $imageHeight - $y - $height;
-                $newWidth = $width;
-                $newHeight = $height;
-                break;
-                
-            case 270:
-                // 270 degrees clockwise: (x,y) -> (imageHeight-y-height, x)
-                $newX = $imageHeight - $y - $height;
-                $newY = $x;
-                $newWidth = $height;
-                $newHeight = $width;
-                break;
-                
-            default:
-                return $region; // Unknown rotation, return original
-        }
-        
-        return [
-            'id' => $region['id'],
-            'x' => $newX,
-            'y' => $newY,
-            'width' => $newWidth,
-            'height' => $newHeight,
-            'page' => $region['page'],
-            'rotation' => $rotation
-        ];
     }
 }
