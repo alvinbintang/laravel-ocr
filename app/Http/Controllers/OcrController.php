@@ -18,40 +18,35 @@ class OcrController extends Controller
 
     public function index()
     {
-        $ocrResults = $this->ocrService->getAllResults();
+        $ocrResults = $this->ocrService->getAllOcrResults(); // UPDATED: changed from getAllResults()
         return view('ocr.upload', ['ocrResults' => $ocrResults]);
     }
 
     public function extract(OcrExtractRequest $request)
     {
-        $ocrResult = $this->ocrService->processPdfUpload($request->file('pdf'));
+        $result = $this->ocrService->processPdfUpload($request->file('pdf')); // UPDATED: get array result
         
-        return redirect()->route('ocr.preview', ['id' => $ocrResult->id])
-            ->with('success', 'File sedang dikonversi. Silakan tunggu sebentar untuk memilih area.');
+        return redirect()->route('ocr.preview', ['id' => $result['ocr_result_id']]) // UPDATED: use correct key
+            ->with('success', $result['message']); // UPDATED: use message from result
     }
 
     public function preview($id)
     {
-        $previewData = $this->ocrService->getPreviewStatus($id);
+        $previewData = $this->ocrService->checkPreviewStatus($id); // UPDATED: changed from getPreviewStatus()
         
         // If still processing or error, redirect to status page
-        if ($previewData['status'] === 'pending' || $previewData['status'] === 'processing') {
+        if (!$previewData['can_preview']) { // UPDATED: use correct key
             return redirect()->route('ocr.status', ['id' => $id])
-                ->with('info', 'File masih dalam proses konversi. Mohon tunggu sebentar.');
-        }
-        
-        if ($previewData['status'] === 'error') {
-            return redirect()->route('ocr.status', ['id' => $id])
-                ->with('error', 'Terjadi kesalahan dalam memproses file.');
+                ->with('info', $previewData['message']); // UPDATED: use message from result
         }
 
-        return view('ocr.preview', ['ocrResult' => $previewData['result']]);
+        return view('ocr.preview', ['ocrResult' => $previewData['ocr_result']]); // UPDATED: use correct key
     }
 
     public function status($id)
     {
-        $ocrResult = $this->ocrService->getStatusInfo($id);
-        return view('ocr.status', ['ocrResult' => $ocrResult]);
+        $statusData = $this->ocrService->getStatusInfo($id); // UPDATED: get array result
+        return view('ocr.status', ['ocrResult' => $statusData['ocr_result']]); // UPDATED: use correct key
     }
 
     // ADDED: API endpoint for status checking
@@ -59,29 +54,29 @@ class OcrController extends Controller
     {
         $statusData = $this->ocrService->getStatusInfo($id);
         return response()->json([
-            'status' => $statusData->status,
-            'filename' => $statusData->filename
+            'status' => $statusData['status'], // UPDATED: access array key
+            'filename' => $statusData['filename'] // UPDATED: access array key
         ]);
     }
 
     public function processRegions(ProcessRegionsRequest $request, $id)
     {
-        try {
-            $this->ocrService->processSelectedRegions(
-                $id, 
-                $request->regions, 
-                $request->input('previewDimensions')
-            );
+        $result = $this->ocrService->processRegions( // UPDATED: changed from processSelectedRegions()
+            $id, 
+            $request->regions, 
+            $request->input('previewDimensions')
+        );
 
+        if ($result['success']) { // UPDATED: check success from result
             return response()->json([
-                'message' => 'Processing selected regions',
-                'status' => 'processing',
+                'message' => $result['message'],
+                'status' => $result['status'],
                 'success' => true
             ]);
-        } catch (\Exception $e) {
+        } else {
             return response()->json([
-                'message' => 'Error processing regions: ' . $e->getMessage(),
-                'status' => 'error',
+                'message' => $result['message'],
+                'status' => $result['status'],
                 'success' => false
             ], 500);
         }
@@ -89,9 +84,9 @@ class OcrController extends Controller
 
     public function showResult($id)
     {
-        $resultData = $this->ocrService->getProcessingResult($id);
+        $resultData = $this->ocrService->getOcrResult($id); // UPDATED: changed from getProcessingResult()
         
-        if ($resultData['status'] === 'done') {
+        if ($resultData['status'] === 'success') { // UPDATED: check for 'success' instead of 'done'
             return response()->json([
                 'status' => 'success',
                 'results' => $resultData['results']
@@ -100,9 +95,9 @@ class OcrController extends Controller
 
         return response()->json([
             'status' => $resultData['status'],
-            'message' => $resultData['status'] === 'error' 
+            'message' => $resultData['message'] ?? ($resultData['status'] === 'error' 
                 ? 'Error processing regions' 
-                : 'Still processing'
+                : 'Still processing') // UPDATED: use message from result or fallback
         ]);
     }
     
@@ -111,14 +106,16 @@ class OcrController extends Controller
      */
     public function exportJson($id)
     {
-        if (!$this->ocrService->isReadyForExport($id)) {
-            return redirect()->back()->with('error', 'OCR belum selesai diproses.');
+        try {
+            $this->ocrService->isReadyForExport($id); // UPDATED: this throws exception if not ready
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', $e->getMessage());
         }
         
-        $exportData = $this->ocrService->prepareJsonExport($id);
-        $filename = $exportData['filename'];
+        $exportData = $this->ocrService->prepareJsonExportData($id); // UPDATED: changed from prepareJsonExport()
+        $filename = pathinfo($exportData['document']['filename'], PATHINFO_FILENAME) . '_ocr_results.json'; // UPDATED: create filename
         
-        return response()->json($exportData['data'])
+        return response()->json($exportData)
             ->header('Content-Disposition', 'attachment; filename="' . $filename . '"')
             ->header('Content-Type', 'application/json');
     }
@@ -128,16 +125,17 @@ class OcrController extends Controller
      */
     public function exportCsv($id)
     {
-        if (!$this->ocrService->isReadyForExport($id)) {
-            return redirect()->back()->with('error', 'OCR belum selesai diproses.');
+        try {
+            $this->ocrService->isReadyForExport($id); // UPDATED: this throws exception if not ready
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', $e->getMessage());
         }
         
-        $exportData = $this->ocrService->prepareCsvExport($id);
-        $filename = $exportData['filename'];
+        $exportData = $this->ocrService->prepareCsvExportData($id); // UPDATED: changed from prepareCsvExport()
         
         $headers = [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Content-Disposition' => 'attachment; filename="' . $exportData['filename'] . '"',
             'Pragma' => 'no-cache',
             'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
             'Expires' => '0'
@@ -147,19 +145,11 @@ class OcrController extends Controller
             $file = fopen('php://output', 'w');
             
             // Add CSV header
-            fputcsv($file, ['Page', 'Region ID', 'X', 'Y', 'Width', 'Height', 'Text']);
+            fputcsv($file, $exportData['headers']); // UPDATED: use headers from export data
             
             // Add data rows
-            foreach ($exportData['data'] as $result) {
-                fputcsv($file, [
-                    $result['page'] ?? 1,
-                    $result['region_id'] ?? '',
-                    $result['coordinates']['x'] ?? 0,
-                    $result['coordinates']['y'] ?? 0,
-                    $result['coordinates']['width'] ?? 0,
-                    $result['coordinates']['height'] ?? 0,
-                    $result['text'] ?? ''
-                ]);
+            foreach ($exportData['data'] as $row) { // UPDATED: data is already formatted
+                fputcsv($file, $row);
             }
             
             fclose($file);
