@@ -55,20 +55,6 @@ class ProcessRegions implements ShouldQueue
             $croppedImages = [];
 
             $image = Image::read($imagePath);
-            
-            // Check if we need to apply rotation to the image
-            $firstRegion = $this->regions[0] ?? null;
-            if ($firstRegion && isset($firstRegion['rotation']) && $firstRegion['rotation'] != 0) {
-                // Apply rotation to the image before processing
-                $rotation = $firstRegion['rotation'];
-                \Log::info("Applying rotation to image before OCR processing", [
-                    'page' => $this->currentPage,
-                    'rotation' => $rotation
-                ]);
-                
-                // Rotate the image
-                $image->rotate($rotation);
-            }
 
             // ADDED: Get actual OCR image dimensions for coordinate scaling
             $ocrImageWidth = $image->width();
