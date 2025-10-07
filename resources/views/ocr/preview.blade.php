@@ -107,19 +107,19 @@
                         <!-- Image Preview Container -->
                         <div class="relative mb-6" id="image-preview-container">
                             <!-- Rotation Controls -->
-                            <div class="flex justify-end mb-2">
-                                <div class="flex space-x-2">
-                                    <button id="rotate-left-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            <div class="flex justify-center mb-4">
+                                <div class="bg-white border border-gray-300 rounded-lg shadow-sm p-2 inline-flex space-x-3">
+                                    <button id="rotate-left-btn" class="bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-md text-sm font-medium flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                                         </svg>
-                                        Rotate Left
+                                        Putar Kiri
                                     </button>
-                                    <button id="rotate-right-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm flex items-center">
-                                        Rotate Right
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    <button id="rotate-right-btn" class="bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-md text-sm font-medium flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
                                         </svg>
+                                        Putar Kanan
                                     </button>
                                 </div>
                             </div>
@@ -925,14 +925,23 @@
                 this.clearRegionsBtn.disabled = true;
 
                 // Prepare regions data for processing
-                const regionsData = this.regions.map(region => ({
-                    id: region.id,
-                    x: Math.round(region.x),
-                    y: Math.round(region.y),
-                    width: Math.round(region.width),
-                    height: Math.round(region.height),
-                    page: region.page
-                }));
+                const regionsData = this.regions.map(region => {
+                    // Get current rotation for this page
+                    const rotation = pageRotations[region.page] || 0;
+                    
+                    // Create a copy of the region coordinates
+                    let coords = {
+                        id: region.id,
+                        x: Math.round(region.x),
+                        y: Math.round(region.y),
+                        width: Math.round(region.width),
+                        height: Math.round(region.height),
+                        page: region.page,
+                        rotation: rotation // Include rotation information
+                    };
+                    
+                    return coords;
+                });
 
                 // ADDED: Capture preview image dimensions for coordinate scaling
                 const previewDimensions = {
@@ -1295,15 +1304,46 @@
         // Fungsi untuk menerapkan rotasi ke gambar
         function applyRotation() {
             const rotation = pageRotations[currentPage] || 0;
+            const imageContainer = document.getElementById('image-container');
+            
+            // Reset styles
+            imageContainer.style.height = '';
+            imageContainer.style.width = '';
+            previewImage.style.maxWidth = '100%';
+            previewImage.style.maxHeight = 'none';
             previewImage.style.transform = `rotate(${rotation}deg)`;
             
             // Sesuaikan container jika rotasi 90 atau 270 derajat
             if (rotation === 90 || rotation === 270) {
-                previewImage.style.maxWidth = 'none';
-                previewImage.style.maxHeight = '100%';
+                // Tunggu gambar dimuat untuk mendapatkan dimensi yang benar
+                setTimeout(() => {
+                    const imgWidth = previewImage.naturalWidth;
+                    const imgHeight = previewImage.naturalHeight;
+                    
+                    if (imgWidth && imgHeight) {
+                        // Jika rotasi 90/270 derajat, tukar dimensi untuk container
+                        const containerWidth = Math.min(window.innerWidth * 0.8, imgHeight);
+                        const containerHeight = Math.min(window.innerHeight * 0.7, imgWidth);
+                        
+                        // Atur ukuran container untuk menampung gambar yang dirotasi
+                        imageContainer.style.width = `${containerWidth}px`;
+                        imageContainer.style.height = `${containerHeight}px`;
+                        
+                        // Posisikan gambar di tengah container
+                        previewImage.style.position = 'absolute';
+                        previewImage.style.top = '50%';
+                        previewImage.style.left = '50%';
+                        previewImage.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
+                        previewImage.style.maxWidth = 'none';
+                        previewImage.style.maxHeight = '100%';
+                    }
+                }, 50);
             } else {
-                previewImage.style.maxWidth = '100%';
-                previewImage.style.maxHeight = 'none';
+                // Untuk rotasi 0 atau 180 derajat, gunakan layout normal
+                previewImage.style.position = '';
+                previewImage.style.top = '';
+                previewImage.style.left = '';
+                previewImage.style.transform = `rotate(${rotation}deg)`;
             }
         }
         
