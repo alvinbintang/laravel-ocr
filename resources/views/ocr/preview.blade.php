@@ -107,17 +107,17 @@
                         <!-- Image Preview Container -->
                         <div class="relative mb-6" id="image-preview-container">
                             <!-- Rotation Controls -->
-                            <div class="flex justify-center mb-4">
-                                <div class="flex space-x-4">
-                                    <button id="rotate-left-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded text-sm flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            <div class="flex justify-end mb-4 pr-4">
+                                <div class="flex space-x-2">
+                                    <button id="rotate-left-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm flex items-center shadow-md transition-colors">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                         </svg>
                                         Rotate Left
                                     </button>
-                                    <button id="rotate-right-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded text-sm flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                                    <button id="rotate-right-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm flex items-center shadow-md transition-colors">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 20v-5h-.581m0 0a8.003 8.003 0 01-15.357-2M4.581 15H9m11-11v5h-.581m0 0a8.001 8.001 0 00-15.357 2M4.581 9H9" />
                                         </svg>
                                         Rotate Right
                                     </button>
@@ -1305,84 +1305,74 @@
             const originalWidth = previewImage.naturalWidth;
             const originalHeight = previewImage.naturalHeight;
             const containerWidth = imageContainer.offsetWidth;
+            const containerHeight = imageContainer.offsetHeight;
             
             // Reset semua style terlebih dahulu
-            imageContainer.style.overflow = 'hidden';
+            imageContainer.style.overflow = 'visible';
+            imageContainer.style.display = 'flex';
+            imageContainer.style.alignItems = 'center';
+            imageContainer.style.justifyContent = 'center';
             
-            // Atur transformasi gambar
+            // Reset gambar ke kondisi awal
+            previewImage.style.maxWidth = '';
+            previewImage.style.maxHeight = '';
+            previewImage.style.width = '';
+            previewImage.style.height = '';
+            previewImage.style.margin = 'auto';
+            previewImage.style.transformOrigin = 'center center';
+            
             if (rotation === 90 || rotation === 270) {
                 // Untuk rotasi landscape (90° atau 270°)
                 
-                // Hitung rasio aspek gambar
-                const aspectRatio = originalWidth / originalHeight;
+                // Hitung dimensi yang diperlukan setelah rotasi
+                const rotatedWidth = originalHeight;
+                const rotatedHeight = originalWidth;
+                
+                // Hitung skala yang diperlukan agar gambar muat dalam container
+                const scaleX = containerWidth / rotatedWidth;
+                const scaleY = containerHeight / rotatedHeight;
+                const scale = Math.min(scaleX, scaleY, 0.9); // Maksimal 90% dari container
                 
                 // Atur container untuk menampung gambar landscape
-                imageContainer.style.height = 'auto';
-                imageContainer.style.minHeight = '600px';
-                imageContainer.style.display = 'flex';
-                imageContainer.style.alignItems = 'center';
-                imageContainer.style.justifyContent = 'center';
+                imageContainer.style.height = Math.max(containerHeight, rotatedHeight * scale + 50) + 'px';
+                imageContainer.style.minHeight = '500px';
                 
-                // Atur gambar agar tidak terpotong
-                const scaleFactor = 0.85; // Faktor skala untuk memastikan gambar terlihat penuh
-                
-                // Atur ukuran gambar berdasarkan orientasi
-                if (originalWidth > originalHeight) {
-                    // Gambar asli landscape
-                    previewImage.style.width = 'auto';
-                    previewImage.style.height = (containerWidth * scaleFactor) + 'px';
-                } else {
-                    // Gambar asli portrait
-                    previewImage.style.width = 'auto';
-                    previewImage.style.height = (containerWidth * scaleFactor) + 'px';
-                }
-                
+                // Atur gambar dengan skala yang tepat
+                previewImage.style.width = (originalWidth * scale) + 'px';
+                previewImage.style.height = (originalHeight * scale) + 'px';
                 previewImage.style.maxWidth = 'none';
                 previewImage.style.maxHeight = 'none';
-                previewImage.style.transformOrigin = 'center center';
-                previewImage.style.transform = `rotate(${rotation}deg)`;
+                previewImage.style.transform = `rotate(${rotation}deg) scale(1)`;
                 previewImage.style.display = 'block';
-                previewImage.style.margin = 'auto';
                 
             } else {
                 // Untuk rotasi portrait (0° atau 180°)
-                imageContainer.style.height = 'auto';
-                imageContainer.style.display = 'flex';
-                imageContainer.style.alignItems = 'center';
-                imageContainer.style.justifyContent = 'center';
                 
-                previewImage.style.maxWidth = '100%';
-                previewImage.style.height = 'auto';
-                previewImage.style.width = 'auto';
-                previewImage.style.transformOrigin = 'center center';
+                // Hitung skala yang diperlukan
+                const scaleX = containerWidth / originalWidth;
+                const scaleY = containerHeight / originalHeight;
+                const scale = Math.min(scaleX, scaleY, 1); // Maksimal ukuran asli
+                
+                imageContainer.style.height = 'auto';
+                imageContainer.style.minHeight = 'auto';
+                
+                // Atur gambar untuk portrait
+                if (scale < 1) {
+                    previewImage.style.width = (originalWidth * scale) + 'px';
+                    previewImage.style.height = (originalHeight * scale) + 'px';
+                } else {
+                    previewImage.style.maxWidth = '100%';
+                    previewImage.style.height = 'auto';
+                }
+                
                 previewImage.style.transform = `rotate(${rotation}deg)`;
-                previewImage.style.margin = 'auto';
                 previewImage.style.display = 'block';
             }
             
             // Perbarui tampilan region jika ada
             if (typeof updateRegionsDisplay === 'function') {
-                setTimeout(updateRegionsDisplay, 100);
+                setTimeout(updateRegionsDisplay, 150);
             }
-            
-            // Tambahkan delay untuk memastikan gambar telah dirender dengan benar
-            setTimeout(() => {
-                // Pastikan gambar tetap berada dalam container
-                const imgRect = previewImage.getBoundingClientRect();
-                const containerRect = imageContainer.getBoundingClientRect();
-                
-                // Jika gambar lebih besar dari container, sesuaikan ukurannya
-                if (imgRect.width > containerRect.width || imgRect.height > containerRect.height) {
-                    if (rotation === 90 || rotation === 270) {
-                        const newHeight = Math.min(containerRect.width * 0.9, imgRect.height);
-                        previewImage.style.height = newHeight + 'px';
-                        previewImage.style.width = 'auto';
-                    } else {
-                        previewImage.style.maxWidth = '95%';
-                        previewImage.style.height = 'auto';
-                    }
-                }
-            }, 50);
         }
         
         // Fungsi untuk menyimpan rotasi ke server
