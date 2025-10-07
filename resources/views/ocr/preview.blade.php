@@ -217,8 +217,8 @@
                                     });
                                 }
                             </script>
-                            <div id="image-container" class="relative border border-gray-300 rounded flex items-center justify-center" style="min-height: 400px; overflow: visible;">
-                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto transition-transform duration-300" style="display: none;">
+                            <div id="image-container" class="relative border border-gray-300 rounded overflow-hidden">
+                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto" style="display: none;">
                                 <!-- UPDATED: Improved loading placeholder with spinner -->
                                 <div id="loading-placeholder" class="flex items-center justify-center bg-gray-100 h-96">
                                     <div class="text-center">
@@ -397,31 +397,26 @@
     <style>
         .image-container {
             position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: inline-block;
             border: 2px solid #e5e7eb;
             border-radius: 8px;
+            overflow: hidden;
             background-color: #f9fafb;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             max-width: 100%;
-            /* UPDATED: Allow container to expand for rotated images */
-            width: 100%;
+            /* UPDATED: Improved responsive image container */
+            width: fit-content;
             margin: 0 auto;
-            min-height: 400px;
-            overflow: visible; /* Allow rotated content to be visible */
         }
 
         .preview-image {
             display: block;
             max-width: 100%;
             height: auto;
-            /* UPDATED: Improved image display for rotation */
+            /* UPDATED: Improved image display */
+            min-height: 400px;
             object-fit: contain;
             background-color: white;
-            transition: transform 0.3s ease;
-            /* Allow image to expand beyond container when rotated */
-            transform-origin: center center;
         }
 
         .loading-placeholder {
@@ -917,39 +912,6 @@
                 }
             }
 
-            // ADDED: Function to transform coordinates based on rotation
-            transformCoordinatesForRotation(region, rotation, imageWidth, imageHeight) {
-                if (rotation === 0) {
-                    return region; // No transformation needed
-                }
-                
-                let transformedRegion = { ...region };
-                
-                switch (rotation) {
-                    case 90:
-                        // For 90° rotation: x' = y, y' = width - x - regionWidth
-                        transformedRegion.x = region.y;
-                        transformedRegion.y = imageWidth - region.x - region.width;
-                        transformedRegion.width = region.height;
-                        transformedRegion.height = region.width;
-                        break;
-                    case 180:
-                        // For 180° rotation: x' = width - x - regionWidth, y' = height - y - regionHeight
-                        transformedRegion.x = imageWidth - region.x - region.width;
-                        transformedRegion.y = imageHeight - region.y - region.height;
-                        break;
-                    case 270:
-                        // For 270° rotation: x' = height - y - regionHeight, y' = x
-                        transformedRegion.x = imageHeight - region.y - region.height;
-                        transformedRegion.y = region.x;
-                        transformedRegion.width = region.height;
-                        transformedRegion.height = region.width;
-                        break;
-                }
-                
-                return transformedRegion;
-            }
-
             processRegions() {
                 if (this.regions.length === 0) {
                     alert('Please select at least one region before processing.');
@@ -962,6 +924,16 @@
                 this.addRegionBtn.disabled = true;
                 this.clearRegionsBtn.disabled = true;
 
+                // Prepare regions data for processing
+                const regionsData = this.regions.map(region => ({
+                    id: region.id,
+                    x: Math.round(region.x),
+                    y: Math.round(region.y),
+                    width: Math.round(region.width),
+                    height: Math.round(region.height),
+                    page: region.page
+                }));
+
                 // ADDED: Capture preview image dimensions for coordinate scaling
                 const previewDimensions = {
                     width: this.previewImage.clientWidth,
@@ -970,26 +942,6 @@
 
                 // ADDED: Get current page rotation
                 const currentRotation = pageRotations[this.currentPage] || 0;
-
-                // UPDATED: Transform coordinates based on rotation before sending to backend
-                const regionsData = this.regions.map(region => {
-                    // First, transform coordinates to account for rotation
-                    const transformedRegion = this.transformCoordinatesForRotation(
-                        region, 
-                        currentRotation, 
-                        previewDimensions.width, 
-                        previewDimensions.height
-                    );
-                    
-                    return {
-                        id: transformedRegion.id,
-                        x: Math.round(transformedRegion.x),
-                        y: Math.round(transformedRegion.y),
-                        width: Math.round(transformedRegion.width),
-                        height: Math.round(transformedRegion.height),
-                        page: transformedRegion.page
-                    };
-                });
 
                 // Send to server
                 fetch('{{ route("ocr.process-regions", $ocrResult->id) }}', {
@@ -1347,36 +1299,15 @@
         // Fungsi untuk menerapkan rotasi ke gambar
         function applyRotation() {
             const rotation = pageRotations[currentPage] || 0;
-            const previewImage = document.getElementById('preview-image');
-            const imageContainer = document.getElementById('image-container');
-            
-            if (!previewImage || !imageContainer) return;
-            
-            // Apply rotation transform
             previewImage.style.transform = `rotate(${rotation}deg)`;
             
-            // Calculate container dimensions based on rotation
+            // Sesuaikan container jika rotasi 90 atau 270 derajat
             if (rotation === 90 || rotation === 270) {
-                // For 90/270 degree rotations, we need more height
-                const imageWidth = previewImage.naturalWidth || previewImage.clientWidth;
-                const imageHeight = previewImage.naturalHeight || previewImage.clientHeight;
-                
-                // Calculate the diagonal space needed
-                const maxDimension = Math.max(imageWidth, imageHeight);
-                imageContainer.style.minHeight = `${maxDimension * 0.8}px`;
-                
-                // Ensure image can scale properly when rotated
                 previewImage.style.maxWidth = 'none';
-                previewImage.style.maxHeight = '80vh';
-                previewImage.style.width = 'auto';
-                previewImage.style.height = 'auto';
+                previewImage.style.maxHeight = '100%';
             } else {
-                // For 0/180 degree rotations, use normal sizing
-                imageContainer.style.minHeight = '400px';
                 previewImage.style.maxWidth = '100%';
                 previewImage.style.maxHeight = 'none';
-                previewImage.style.width = 'auto';
-                previewImage.style.height = 'auto';
             }
         }
         
