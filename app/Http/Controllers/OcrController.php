@@ -2,133 +2,82 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\ProcessOcr;
-use App\Jobs\ProcessRegions;
-use App\Models\OcrResult;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use App\Http\Requests\OcrExtractRequest;
+use App\Http\Requests\ProcessRegionsRequest;
+use App\Services\OcrService;
 
 class OcrController extends Controller
 {
+    protected $ocrService;
+
+    public function __construct(OcrService $ocrService)
+    {
+        $this->ocrService = $ocrService;
+    }
+
     public function index()
     {
-        $ocrResults = OcrResult::orderBy('created_at', 'desc')->get();
+        $ocrResults = $this->ocrService->getAllResults();
         return view('ocr.upload', ['ocrResults' => $ocrResults]);
     }
 
-    public function extract(Request $request)
+    public function extract(OcrExtractRequest $request)
     {
-        $request->validate([
-            'pdf' => 'required|mimes:pdf|max:20480', // max 20MB
-        ]);
-
-        // Log upload information
-        \Illuminate\Support\Facades\Log::info('PDF Upload Details', [
-            'original_name' => $request->file('pdf')->getClientOriginalName(),
-            'mime_type' => $request->file('pdf')->getMimeType(),
-            'size' => $request->file('pdf')->getSize(),
-            'error' => $request->file('pdf')->getError()
-        ]);
-
-        // Additional PDF validation
-        $pdfContent = file_get_contents($request->file('pdf')->getRealPath());
-        if (substr($pdfContent, 0, 4) !== '%PDF') {
-            return back()->with('error', 'File bukan PDF yang valid. Pastikan file tidak corrupt.');
-        }
-
-        // Simpan PDF
-        $path = $request->file('pdf')->store('ocr');
-
-        // Simpan informasi ke database
-        $ocrResult = OcrResult::create([
-            'filename' => basename($path),
-            'status' => 'pending',
-        ]);
-
-        // Dispatch job ke antrian untuk konversi PDF ke image
-        ProcessOcr::dispatch($ocrResult->id, Storage::path($path));
-
+        $ocrResult = $this->ocrService->processPdfUpload($request->file('pdf'));
+        
         return redirect()->route('ocr.preview', ['id' => $ocrResult->id])
             ->with('success', 'File sedang dikonversi. Silakan tunggu sebentar untuk memilih area.');
     }
 
     public function preview($id)
     {
-        $ocrResult = OcrResult::findOrFail($id);
+        $previewData = $this->ocrService->getPreviewStatus($id);
         
         // If still processing or error, redirect to status page
-        if ($ocrResult->status === 'pending' || $ocrResult->status === 'processing') {
+        if ($previewData['status'] === 'pending' || $previewData['status'] === 'processing') {
             return redirect()->route('ocr.status', ['id' => $id])
                 ->with('info', 'File masih dalam proses konversi. Mohon tunggu sebentar.');
         }
         
-        if ($ocrResult->status === 'error') {
+        if ($previewData['status'] === 'error') {
             return redirect()->route('ocr.status', ['id' => $id])
                 ->with('error', 'Terjadi kesalahan dalam memproses file.');
         }
 
-        return view('ocr.preview', ['ocrResult' => $ocrResult]);
+        return view('ocr.preview', ['ocrResult' => $previewData['result']]);
     }
 
     public function status($id)
     {
-        $ocrResult = OcrResult::findOrFail($id);
+        $ocrResult = $this->ocrService->getStatusInfo($id);
         return view('ocr.status', ['ocrResult' => $ocrResult]);
     }
 
     // ADDED: API endpoint for status checking
     public function statusCheck($id)
     {
-        $ocrResult = OcrResult::findOrFail($id);
+        $statusData = $this->ocrService->getStatusInfo($id);
         return response()->json([
-            'status' => $ocrResult->status,
-            'filename' => $ocrResult->filename
+            'status' => $statusData->status,
+            'filename' => $statusData->filename
         ]);
     }
 
-    public function processRegions(Request $request, $id)
+    public function processRegions(ProcessRegionsRequest $request, $id)
     {
         try {
-            $request->validate([
-                'regions' => 'required|array',
-                'regions.*.id' => 'required|integer',
-                'regions.*.x' => 'required|numeric',
-                'regions.*.y' => 'required|numeric',
-                'regions.*.width' => 'required|numeric',
-                'regions.*.height' => 'required|numeric',
-                'regions.*.page' => 'required|integer|min:1', // UPDATED: Validate page for each region
-                'previewDimensions' => 'nullable|array', // ADDED: Validate preview dimensions
-                'previewDimensions.width' => 'nullable|numeric|min:1', // ADDED: Validate preview width
-                'previewDimensions.height' => 'nullable|numeric|min:1', // ADDED: Validate preview height
-            ]);
-
-            $ocrResult = OcrResult::findOrFail($id);
-            
-            // Update status to processing
-            $ocrResult->update(['status' => 'processing']);
-            
-            // Group regions by page
-            $regionsByPage = collect($request->regions)->groupBy('page')->toArray();
-            
-            // ADDED: Get preview dimensions from request
-            $previewDimensions = $request->input('previewDimensions');
-            
-            // Process each page's regions separately
-            foreach ($regionsByPage as $page => $regions) {
-                ProcessRegions::dispatch($ocrResult->id, $regions, (int)$page, $previewDimensions); // UPDATED: Pass preview dimensions
-            }
+            $this->ocrService->processSelectedRegions(
+                $id, 
+                $request->regions, 
+                $request->input('previewDimensions')
+            );
 
             return response()->json([
                 'message' => 'Processing selected regions',
                 'status' => 'processing',
                 'success' => true
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $e->errors(),
-                'success' => false
-            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error processing regions: ' . $e->getMessage(),
@@ -140,18 +89,18 @@ class OcrController extends Controller
 
     public function showResult($id)
     {
-        $ocrResult = OcrResult::findOrFail($id);
+        $resultData = $this->ocrService->getProcessingResult($id);
         
-        if ($ocrResult->status === 'done') {
+        if ($resultData['status'] === 'done') {
             return response()->json([
                 'status' => 'success',
-                'results' => $ocrResult->ocr_results
+                'results' => $resultData['results']
             ]);
         }
 
         return response()->json([
-            'status' => $ocrResult->status,
-            'message' => $ocrResult->status === 'error' 
+            'status' => $resultData['status'],
+            'message' => $resultData['status'] === 'error' 
                 ? 'Error processing regions' 
                 : 'Still processing'
         ]);
@@ -162,24 +111,14 @@ class OcrController extends Controller
      */
     public function exportJson($id)
     {
-        $ocrResult = OcrResult::findOrFail($id);
-        
-        if ($ocrResult->status !== 'done') {
+        if (!$this->ocrService->isReadyForExport($id)) {
             return redirect()->back()->with('error', 'OCR belum selesai diproses.');
         }
         
-        $filename = pathinfo($ocrResult->filename, PATHINFO_FILENAME) . '_ocr_results.json';
+        $exportData = $this->ocrService->prepareJsonExport($id);
+        $filename = $exportData['filename'];
         
-        $data = [
-            'document' => [
-                'filename' => $ocrResult->filename,
-                'processed_at' => $ocrResult->updated_at->toIso8601String(),
-                'total_pages' => $ocrResult->getTotalPages(),
-            ],
-            'ocr_results' => $ocrResult->ocr_results
-        ];
-        
-        return response()->json($data)
+        return response()->json($exportData['data'])
             ->header('Content-Disposition', 'attachment; filename="' . $filename . '"')
             ->header('Content-Type', 'application/json');
     }
@@ -189,13 +128,12 @@ class OcrController extends Controller
      */
     public function exportCsv($id)
     {
-        $ocrResult = OcrResult::findOrFail($id);
-        
-        if ($ocrResult->status !== 'done') {
+        if (!$this->ocrService->isReadyForExport($id)) {
             return redirect()->back()->with('error', 'OCR belum selesai diproses.');
         }
         
-        $filename = pathinfo($ocrResult->filename, PATHINFO_FILENAME) . '_ocr_results.csv';
+        $exportData = $this->ocrService->prepareCsvExport($id);
+        $filename = $exportData['filename'];
         
         $headers = [
             'Content-Type' => 'text/csv',
@@ -205,14 +143,14 @@ class OcrController extends Controller
             'Expires' => '0'
         ];
         
-        $callback = function() use ($ocrResult) {
+        $callback = function() use ($exportData) {
             $file = fopen('php://output', 'w');
             
             // Add CSV header
             fputcsv($file, ['Page', 'Region ID', 'X', 'Y', 'Width', 'Height', 'Text']);
             
             // Add data rows
-            foreach ($ocrResult->ocr_results as $result) {
+            foreach ($exportData['data'] as $result) {
                 fputcsv($file, [
                     $result['page'] ?? 1,
                     $result['region_id'] ?? '',

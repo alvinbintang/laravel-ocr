@@ -1,49 +1,122 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Services;
 
-use App\Services\ExcelExportService;
+use App\Repositories\Contracts\OcrResultRepositoryInterface;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-class ExcelExportController extends Controller
+class ExcelExportService
 {
-    protected $excelExportService;
+    protected $ocrResultRepository;
 
-    public function __construct(ExcelExportService $excelExportService)
+    public function __construct(OcrResultRepositoryInterface $ocrResultRepository)
     {
-        $this->excelExportService = $excelExportService;
+        $this->ocrResultRepository = $ocrResultRepository;
     }
 
-    public function exportToExcel($id)
+    /**
+     * Export OCR result to Excel
+     *
+     * @param int $id
+     * @return void
+     * @throws \Exception
+     */
+    public function exportToExcel(int $id): void
     {
-        try {
-            $this->excelExportService->exportToExcel($id);
-        } catch (\Exception $e) {
-            return redirect()->back()->with('error', $e->getMessage());
+        $ocrResult = $this->ocrResultRepository->findById($id);
+        
+        if ($ocrResult->status !== 'done' || empty($ocrResult->text)) {
+            throw new \Exception('Data OCR belum selesai diproses atau tidak ada hasil.');
         }
+
+        $allRabs = $this->parseOcrDataV4($ocrResult->text);
+        if (empty($allRabs)) {
+            throw new \Exception('Tidak ada data RAB yang dapat dikenali dari dokumen.');
+        }
+
+        $spreadsheet = new Spreadsheet();
+        foreach ($allRabs as $index => $rabData) {
+            if (empty($rabData['items'])) continue; // Lewati jika tidak ada item belanja sama sekali
+            
+            if ($index > 0) $spreadsheet->createSheet();
+            $sheet = $spreadsheet->getSheet($index);
+
+            $sheetTitle = 'RAB ' . ($index + 1);
+            if (!empty($rabData['kegiatan'])) {
+                 $cleanTitle = preg_replace('/[^a-zA-Z0-9\s]/', '', $rabData['kegiatan']);
+                 $sheetTitle = substr($cleanTitle, 0, 25);
+            }
+            $sheet->setTitle($sheetTitle);
+
+            $this->populateSheet($sheet, $rabData);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+        $filename = 'RAB_Lengkap_' . date('Y-m-d_H-i-s') . '.xlsx';
+        
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+        
+        $writer = new Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
     }
 
-    private function cleanNumber($string) {
+    /**
+     * Clean number string for processing
+     *
+     * @param string $string
+     * @return string
+     */
+    private function cleanNumber($string): string
+    {
         $string = str_replace('.', '', $string);
         $string = str_replace(',', '.', $string);
         return preg_replace('/[^0-9.]/', '', $string);
     }
 
-    private function getEmptyRabStructure() {
+    /**
+     * Get empty RAB structure template
+     *
+     * @return array
+     */
+    private function getEmptyRabStructure(): array
+    {
         return [
-            'title' => 'RENCANA ANGGARAN BIAYA (RAB)', 'organization' => '', 'year' => '', 'type' => '',
-            'bidang' => '', 'sub_bidang' => '', 'kegiatan' => '', 'waktu_pelaksanaan' => '', 'output' => '',
-            'items' => [], 'total_amount' => '', 'lokasi_tanggal' => '', 'disetujui_jabatan' => 'KEPALA DESA',
-            'disetujui_nama' => '', 'diverifikasi_jabatan' => 'SEKRETARIS DESA', 'diverifikasi_nama' => '',
-            'pelaksana_jabatan' => 'Pelaksana Kegiatan Anggaran,', 'pelaksana_nama' => '',
+            'title' => 'RENCANA ANGGARAN BIAYA (RAB)', 
+            'organization' => '', 
+            'year' => '', 
+            'type' => '',
+            'bidang' => '', 
+            'sub_bidang' => '', 
+            'kegiatan' => '', 
+            'waktu_pelaksanaan' => '', 
+            'output' => '',
+            'items' => [], 
+            'total_amount' => '', 
+            'lokasi_tanggal' => '', 
+            'disetujui_jabatan' => 'KEPALA DESA',
+            'disetujui_nama' => '', 
+            'diverifikasi_jabatan' => 'SEKRETARIS DESA', 
+            'diverifikasi_nama' => '',
+            'pelaksana_jabatan' => 'Pelaksana Kegiatan Anggaran,', 
+            'pelaksana_nama' => '',
         ];
     }
     
     /**
-     * ========================================================================
-     * FUNGSI PARSING V4 - Menggabungkan halaman data dan halaman signature
-     * ========================================================================
+     * Parse OCR data V4 - Menggabungkan halaman data dan halaman signature
+     *
+     * @param string $text
+     * @return array
      */
-    private function parseOcrDataV4($text) {
+    private function parseOcrDataV4($text): array
+    {
         $lines = explode("\n", $text);
         $allRabs = [];
         $currentRab = $this->getEmptyRabStructure();
@@ -86,9 +159,12 @@ class ExcelExportController extends Controller
             if ($inItemSection) {
                  if (preg_match('/^(\d{2}\.)\s+(.*?)\s+((?:\d[\d\s.,]*)\s*[\w\s()x]+)\s+([\d.,]+)\s+([\d.,]+)$/', $line, $matches)) {
                     $currentRab['items'][] = [
-                        'code' => '', 'description' => trim($matches[1] . ' ' . $matches[2]),
-                        'volume' => trim($matches[3]), 'unit_price' => $this->cleanNumber($matches[4]),
-                        'amount' => $this->cleanNumber($matches[5]), 'is_detail' => true
+                        'code' => '', 
+                        'description' => trim($matches[1] . ' ' . $matches[2]),
+                        'volume' => trim($matches[3]), 
+                        'unit_price' => $this->cleanNumber($matches[4]),
+                        'amount' => $this->cleanNumber($matches[5]), 
+                        'is_detail' => true
                     ];
                 } elseif (preg_match('/^(\d[\d\.]*\.?)\s+(.*?)\s+([\d.,]+)$/', $line, $matches)) {
                      if (strpos($line, 'JUMLAH (Rp)') !== false) {
@@ -98,8 +174,12 @@ class ExcelExportController extends Controller
                         $description = trim($matches[2]);
                         if (in_array(strtoupper($description), ['URAIAN'])) continue;
                         $currentRab['items'][] = [
-                            'code' => $code, 'description' => $description, 'volume' => '', 'unit_price' => '',
-                            'amount' => $this->cleanNumber($matches[3]), 'is_detail' => false
+                            'code' => $code, 
+                            'description' => $description, 
+                            'volume' => '', 
+                            'unit_price' => '',
+                            'amount' => $this->cleanNumber($matches[3]), 
+                            'is_detail' => false
                         ];
                      }
                 }
@@ -120,35 +200,77 @@ class ExcelExportController extends Controller
         return $allRabs;
     }
 
-    private function populateSheet($sheet, $data) {
-        // ... (Kode untuk mengisi header utama, informasi bidang, dan tabel item tetap sama)
-        $sheet->getColumnDimension('A')->setWidth(12); $sheet->getColumnDimension('B')->setWidth(55);
-        $sheet->getColumnDimension('C')->setWidth(20); $sheet->getColumnDimension('D')->setWidth(20);
+    /**
+     * Populate Excel sheet with RAB data
+     *
+     * @param \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet
+     * @param array $data
+     * @return void
+     */
+    private function populateSheet($sheet, $data): void
+    {
+        // Set column widths
+        $sheet->getColumnDimension('A')->setWidth(12); 
+        $sheet->getColumnDimension('B')->setWidth(55);
+        $sheet->getColumnDimension('C')->setWidth(20); 
+        $sheet->getColumnDimension('D')->setWidth(20);
         $sheet->getColumnDimension('E')->setWidth(20);
+        
         $row = 1;
+        
+        // Header
         $sheet->mergeCells('A'.$row.':E'.$row)->setCellValue('A'.$row, $data['title'])->getStyle('A'.$row)->getFont()->setBold(true)->setSize(14);
-        $sheet->getStyle('A'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); $row++;
+        $sheet->getStyle('A'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); 
+        $row++;
+        
         $sheet->mergeCells('A'.$row.':E'.$row)->setCellValue('A'.$row, $data['organization'])->getStyle('A'.$row)->getFont()->setBold(true);
-        $sheet->getStyle('A'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); $row++;
+        $sheet->getStyle('A'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); 
+        $row++;
+        
         $sheet->mergeCells('A'.$row.':E'.$row)->setCellValue('A'.$row, $data['year'])->getStyle('A'.$row)->getFont()->setBold(true);
-        $sheet->getStyle('A'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); $row+=2;
+        $sheet->getStyle('A'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); 
+        $row+=2;
+        
+        // Information section
         $infoStartRow = $row;
-        $sheet->setCellValue('A'.$row, 'Bidang')->setCellValue('B'.$row, ':')->setCellValue('C'.$row, $data['bidang'])->mergeCells('C'.$row.':E'.$row); $row++;
-        $sheet->setCellValue('A'.$row, 'Sub Bidang')->setCellValue('B'.$row, ':')->setCellValue('C'.$row, $data['sub_bidang'])->mergeCells('C'.$row.':E'.$row); $row++;
-        $sheet->setCellValue('A'.$row, 'Kegiatan')->setCellValue('B'.$row, ':')->setCellValue('C'.$row, $data['kegiatan'])->mergeCells('C'.$row.':E'.$row); $row++;
-        $sheet->setCellValue('A'.$row, 'Waktu Pelaksanaan')->setCellValue('B'.$row, ':')->setCellValue('C'.$row, $data['waktu_pelaksanaan'])->mergeCells('C'.$row.':E'.$row); $row++;
-        $sheet->setCellValue('A'.$row, 'Output/Keluaran')->setCellValue('B'.$row, ':')->setCellValue('C'.$row, $data['output'])->mergeCells('C'.$row.':E'.$row); $row++;
-        $sheet->getStyle('A'.$infoStartRow.':E'.($row-1))->getBorders()->getOutline()->setBorderStyle(Border::BORDER_MEDIUM); $row++;
+        $sheet->setCellValue('A'.$row, 'Bidang')->setCellValue('B'.$row, ':')->setCellValue('C'.$row, $data['bidang'])->mergeCells('C'.$row.':E'.$row); 
+        $row++;
+        $sheet->setCellValue('A'.$row, 'Sub Bidang')->setCellValue('B'.$row, ':')->setCellValue('C'.$row, $data['sub_bidang'])->mergeCells('C'.$row.':E'.$row); 
+        $row++;
+        $sheet->setCellValue('A'.$row, 'Kegiatan')->setCellValue('B'.$row, ':')->setCellValue('C'.$row, $data['kegiatan'])->mergeCells('C'.$row.':E'.$row); 
+        $row++;
+        $sheet->setCellValue('A'.$row, 'Waktu Pelaksanaan')->setCellValue('B'.$row, ':')->setCellValue('C'.$row, $data['waktu_pelaksanaan'])->mergeCells('C'.$row.':E'.$row); 
+        $row++;
+        $sheet->setCellValue('A'.$row, 'Output/Keluaran')->setCellValue('B'.$row, ':')->setCellValue('C'.$row, $data['output'])->mergeCells('C'.$row.':E'.$row); 
+        $row++;
+        
+        $sheet->getStyle('A'.$infoStartRow.':E'.($row-1))->getBorders()->getOutline()->setBorderStyle(Border::BORDER_MEDIUM); 
+        $row++;
+        
+        // Table header
         $tableStartRow = $row;
-        $headerStyle = ['font' => ['bold' => true], 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER], 'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]];
+        $headerStyle = [
+            'font' => ['bold' => true], 
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER, 
+                'vertical' => Alignment::VERTICAL_CENTER
+            ], 
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
+        ];
+        
         $sheet->mergeCells('C'.$row.':E'.$row)->setCellValue('C'.$row, 'ANGGARAN');
         $sheet->setCellValue('A'.$row, 'KODE')->mergeCells('A'.$row.':A'.($row+1));
-        $sheet->setCellValue('B'.$row, 'URAIAN')->mergeCells('B'.$row.':B'.($row+1)); $row++;
+        $sheet->setCellValue('B'.$row, 'URAIAN')->mergeCells('B'.$row.':B'.($row+1)); 
+        $row++;
         $sheet->setCellValue('C'.$row, 'VOLUME')->setCellValue('D'.$row, 'HARGA SATUAN')->setCellValue('E'.$row, 'JUMLAH');
-        $sheet->getStyle('A'.$tableStartRow.':E'.$row)->applyFromArray($headerStyle); $row++;
-        $sheet->setCellValue('A'.$row, '1')->setCellValue('B'.$row, '2')->setCellValue('C'.$row, '3')->setCellValue('D'.$row, '4')->setCellValue('E'.$row, '5');
-        $sheet->getStyle('A'.$row.':E'.$row)->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]])->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); $row++;
+        $sheet->getStyle('A'.$tableStartRow.':E'.$row)->applyFromArray($headerStyle); 
+        $row++;
         
+        $sheet->setCellValue('A'.$row, '1')->setCellValue('B'.$row, '2')->setCellValue('C'.$row, '3')->setCellValue('D'.$row, '4')->setCellValue('E'.$row, '5');
+        $sheet->getStyle('A'.$row.':E'.$row)->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]])->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER); 
+        $row++;
+        
+        // Table data
         foreach ($data['items'] as $item) {
              if ($item['is_detail']) {
                 $sheet->setCellValue('A' . $row, '')->setCellValue('B' . $row, $item['description']);
@@ -165,7 +287,7 @@ class ExcelExportController extends Controller
              $row++;
         }
 
-        // --- BAGIAN BARU: Menambahkan Baris Jumlah dan Blok Signature ---
+        // Total row
         $sheet->mergeCells('A'.$row.':D'.$row)->setCellValue('A'.$row, 'JUMLAH (Rp)');
         $sheet->getStyle('A'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         if (!empty($data['total_amount'])) {
@@ -176,6 +298,7 @@ class ExcelExportController extends Controller
         $sheet->getStyle('A'.$tableStartRow.':E'.$row)->getBorders()->getOutline()->setBorderStyle(Border::BORDER_MEDIUM);
         $row+=2;
 
+        // Signature section
         if (!empty($data['disetujui_nama'])) {
             $sheet->mergeCells('D'.$row.':E'.$row)->setCellValue('D'.$row, $data['lokasi_tanggal'])->getStyle('D'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $row++;
