@@ -1307,8 +1307,6 @@
             const containerWidth = imageContainer.offsetWidth;
             
             // Reset semua style terlebih dahulu
-            imageContainer.style.height = '';
-            imageContainer.style.width = '';
             imageContainer.style.overflow = 'hidden';
             
             // Atur transformasi gambar
@@ -1318,40 +1316,47 @@
                 // Hitung rasio aspek gambar
                 const aspectRatio = originalWidth / originalHeight;
                 
-                // Sesuaikan container untuk menampung gambar yang dirotasi
-                const containerHeight = containerWidth / aspectRatio;
-                
                 // Atur container untuk menampung gambar landscape
-                imageContainer.style.height = containerWidth + 'px';
+                imageContainer.style.height = 'auto';
+                imageContainer.style.minHeight = '600px';
                 imageContainer.style.display = 'flex';
                 imageContainer.style.alignItems = 'center';
                 imageContainer.style.justifyContent = 'center';
                 
                 // Atur gambar agar tidak terpotong
+                const scaleFactor = 0.85; // Faktor skala untuk memastikan gambar terlihat penuh
+                
+                // Atur ukuran gambar berdasarkan orientasi
+                if (originalWidth > originalHeight) {
+                    // Gambar asli landscape
+                    previewImage.style.width = 'auto';
+                    previewImage.style.height = (containerWidth * scaleFactor) + 'px';
+                } else {
+                    // Gambar asli portrait
+                    previewImage.style.width = 'auto';
+                    previewImage.style.height = (containerWidth * scaleFactor) + 'px';
+                }
+                
                 previewImage.style.maxWidth = 'none';
                 previewImage.style.maxHeight = 'none';
-                previewImage.style.width = 'auto';
-                previewImage.style.height = containerWidth + 'px';
                 previewImage.style.transformOrigin = 'center center';
                 previewImage.style.transform = `rotate(${rotation}deg)`;
                 previewImage.style.display = 'block';
+                previewImage.style.margin = 'auto';
                 
-                // Tambahkan margin untuk memastikan gambar tetap berada di tengah
-                if (rotation === 90) {
-                    previewImage.style.marginLeft = ((containerWidth - containerHeight) / 2) + 'px';
-                } else {
-                    previewImage.style.marginRight = ((containerWidth - containerHeight) / 2) + 'px';
-                }
             } else {
                 // Untuk rotasi portrait (0° atau 180°)
                 imageContainer.style.height = 'auto';
+                imageContainer.style.display = 'flex';
+                imageContainer.style.alignItems = 'center';
+                imageContainer.style.justifyContent = 'center';
                 
                 previewImage.style.maxWidth = '100%';
                 previewImage.style.height = 'auto';
                 previewImage.style.width = 'auto';
                 previewImage.style.transformOrigin = 'center center';
                 previewImage.style.transform = `rotate(${rotation}deg)`;
-                previewImage.style.margin = '0';
+                previewImage.style.margin = 'auto';
                 previewImage.style.display = 'block';
             }
             
@@ -1359,6 +1364,25 @@
             if (typeof updateRegionsDisplay === 'function') {
                 setTimeout(updateRegionsDisplay, 100);
             }
+            
+            // Tambahkan delay untuk memastikan gambar telah dirender dengan benar
+            setTimeout(() => {
+                // Pastikan gambar tetap berada dalam container
+                const imgRect = previewImage.getBoundingClientRect();
+                const containerRect = imageContainer.getBoundingClientRect();
+                
+                // Jika gambar lebih besar dari container, sesuaikan ukurannya
+                if (imgRect.width > containerRect.width || imgRect.height > containerRect.height) {
+                    if (rotation === 90 || rotation === 270) {
+                        const newHeight = Math.min(containerRect.width * 0.9, imgRect.height);
+                        previewImage.style.height = newHeight + 'px';
+                        previewImage.style.width = 'auto';
+                    } else {
+                        previewImage.style.maxWidth = '95%';
+                        previewImage.style.height = 'auto';
+                    }
+                }
+            }, 50);
         }
         
         // Fungsi untuk menyimpan rotasi ke server
