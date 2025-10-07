@@ -217,39 +217,17 @@
                                     });
                                 }
                             </script>
-                            <div id="image-container" class="relative border border-gray-300 rounded overflow-visible">
-                                <div class="flex justify-center items-center">
-                                    <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto transform-origin-center" style="display: none; transform-origin: center;">
-                                    <!-- UPDATED: Improved loading placeholder with spinner -->
-                                    <div id="loading-placeholder" class="flex items-center justify-center bg-gray-100 h-96 w-full">
-                                        <div class="text-center">
-                                            <div class="loading-spinner"></div>
-                                            <p class="text-gray-600">Loading page {{ $currentPage ?? 1 }} of {{ $ocrResult->page_count ?? 1 }}...</p>
-                                        </div>
+                            <div id="image-container" class="relative border border-gray-300 rounded overflow-hidden">
+                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto" style="display: none;">
+                                <!-- UPDATED: Improved loading placeholder with spinner -->
+                                <div id="loading-placeholder" class="flex items-center justify-center bg-gray-100 h-96">
+                                    <div class="text-center">
+                                        <div class="loading-spinner"></div>
+                                        <p class="text-gray-600">Loading page {{ $currentPage ?? 1 }} of {{ $ocrResult->page_count ?? 1 }}...</p>
                                     </div>
                                 </div>
                                 <div id="regions-overlay" class="absolute inset-0 pointer-events-none"></div>
                             </div>
-                            
-                            <style>
-                            #image-container {
-                                min-height: 500px;
-                                display: flex;
-                                justify-content: center;
-                                align-items: center;
-                            }
-                            
-                            #preview-image {
-                                max-width: 100%;
-                                height: auto;
-                                transform-origin: center;
-                                transition: transform 0.3s ease;
-                            }
-                            
-                            .transform-origin-center {
-                                transform-origin: center !important;
-                            }
-                            </style>
                         </div>
 
                         <!-- Selected Regions List -->
@@ -971,21 +949,15 @@
                     height: this.previewImage.clientHeight
                 };
 
-                // Add rotation information to each region
-                    const regionsWithRotation = regionsData.map(region => ({
-                        ...region,
-                        rotation: pageRotations[region.page] || 0
-                    }));
-
-                    // Send to server
-                    fetch('{{ route("ocr.process-regions", $ocrResult->id) }}', {
+                // Send to server
+                fetch('{{ route("ocr.process-regions", $ocrResult->id) }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     },
                     body: JSON.stringify({
-                        regions: regionsWithRotation,
+                        regions: regionsData,
                         previewDimensions: previewDimensions // ADDED: Include preview dimensions
                     })
                 })
