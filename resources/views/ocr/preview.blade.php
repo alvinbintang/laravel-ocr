@@ -107,19 +107,19 @@
                         <!-- Image Preview Container -->
                         <div class="relative mb-6" id="image-preview-container">
                             <!-- Rotation Controls -->
-                            <div class="flex justify-end mb-2">
-                                <div class="flex space-x-2">
-                                    <button id="rotate-left-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            <div class="flex justify-center mb-4">
+                                <div class="flex space-x-4">
+                                    <button id="rotate-left-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded text-sm flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                                         </svg>
                                         Rotate Left
                                     </button>
-                                    <button id="rotate-right-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm flex items-center">
-                                        Rotate Right
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    <button id="rotate-right-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded text-sm flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
                                         </svg>
+                                        Rotate Right
                                     </button>
                                 </div>
                             </div>
@@ -1299,15 +1299,65 @@
         // Fungsi untuk menerapkan rotasi ke gambar
         function applyRotation() {
             const rotation = pageRotations[currentPage] || 0;
-            previewImage.style.transform = `rotate(${rotation}deg)`;
+            const imageContainer = document.getElementById('image-container');
             
-            // Sesuaikan container jika rotasi 90 atau 270 derajat
+            // Simpan dimensi asli gambar
+            const originalWidth = previewImage.naturalWidth;
+            const originalHeight = previewImage.naturalHeight;
+            const containerWidth = imageContainer.offsetWidth;
+            
+            // Reset semua style terlebih dahulu
+            imageContainer.style.height = '';
+            imageContainer.style.width = '';
+            imageContainer.style.overflow = 'hidden';
+            
+            // Atur transformasi gambar
             if (rotation === 90 || rotation === 270) {
+                // Untuk rotasi landscape (90° atau 270°)
+                
+                // Hitung rasio aspek gambar
+                const aspectRatio = originalWidth / originalHeight;
+                
+                // Sesuaikan container untuk menampung gambar yang dirotasi
+                const containerHeight = containerWidth / aspectRatio;
+                
+                // Atur container untuk menampung gambar landscape
+                imageContainer.style.height = containerWidth + 'px';
+                imageContainer.style.display = 'flex';
+                imageContainer.style.alignItems = 'center';
+                imageContainer.style.justifyContent = 'center';
+                
+                // Atur gambar agar tidak terpotong
                 previewImage.style.maxWidth = 'none';
-                previewImage.style.maxHeight = '100%';
-            } else {
-                previewImage.style.maxWidth = '100%';
                 previewImage.style.maxHeight = 'none';
+                previewImage.style.width = 'auto';
+                previewImage.style.height = containerWidth + 'px';
+                previewImage.style.transformOrigin = 'center center';
+                previewImage.style.transform = `rotate(${rotation}deg)`;
+                previewImage.style.display = 'block';
+                
+                // Tambahkan margin untuk memastikan gambar tetap berada di tengah
+                if (rotation === 90) {
+                    previewImage.style.marginLeft = ((containerWidth - containerHeight) / 2) + 'px';
+                } else {
+                    previewImage.style.marginRight = ((containerWidth - containerHeight) / 2) + 'px';
+                }
+            } else {
+                // Untuk rotasi portrait (0° atau 180°)
+                imageContainer.style.height = 'auto';
+                
+                previewImage.style.maxWidth = '100%';
+                previewImage.style.height = 'auto';
+                previewImage.style.width = 'auto';
+                previewImage.style.transformOrigin = 'center center';
+                previewImage.style.transform = `rotate(${rotation}deg)`;
+                previewImage.style.margin = '0';
+                previewImage.style.display = 'block';
+            }
+            
+            // Perbarui tampilan region jika ada
+            if (typeof updateRegionsDisplay === 'function') {
+                setTimeout(updateRegionsDisplay, 100);
             }
         }
         
