@@ -55,6 +55,19 @@ class ProcessRegions implements ShouldQueue
             $croppedImages = [];
 
             $image = Image::read($imagePath);
+            
+            // ADDED: Apply rotation if exists for current page
+            $pageRotations = $ocrResult->page_rotations ?? [];
+            $rotation = $pageRotations[$this->currentPage] ?? 0;
+            
+            if ($rotation > 0) {
+                $image->rotate(-$rotation); // Negative because CSS rotation is clockwise, image rotation is counter-clockwise
+                \Log::info("Applied rotation to image", [
+                    'page' => $this->currentPage,
+                    'rotation' => $rotation,
+                    'ocr_result_id' => $this->ocrResultId
+                ]);
+            }
 
             // ADDED: Get actual OCR image dimensions for coordinate scaling
             $ocrImageWidth = $image->width();
@@ -64,63 +77,34 @@ class ProcessRegions implements ShouldQueue
                 // ADDED: Scale coordinates from preview to OCR image dimensions
                 $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
 
-                // Create a cropped image for the region using scaled coordinates
-                // FIXED: Updated for Intervention Image v3 syntax
-                // crop(width, height, offset_x, offset_y, position: 'top-left')
-                $croppedImage = $image->crop(
-                    $scaledRegion['width'],
-                    $scaledRegion['height'],
-                    $scaledRegion['x'],
-                    $scaledRegion['y'],
-                    position: 'top-left'
-                );
+                // Crop the region from the image
+                $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
                 
-                // ADDED: Save cropped image for debugging
-                $debugPath = storage_path('app/public/ocr/cropped');
-                if (!file_exists($debugPath)) {
-                    mkdir($debugPath, 0755, true);
+                // Save cropped image for debugging and permanent storage
+                $croppedImageName = "cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
+                $croppedImagePath = "ocr_results/{$this->ocrResultId}/cropped/{$croppedImageName}";
+                $croppedImageFullPath = Storage::disk('public')->path($croppedImagePath);
+                
+                // Ensure directory exists
+                $croppedImageDir = dirname($croppedImageFullPath);
+                if (!is_dir($croppedImageDir)) {
+                    mkdir($croppedImageDir, 0755, true);
                 }
                 
-                $debugFilename = "region_{$region['id']}_" . time() . "_" . uniqid() . ".png";
-                $debugFullPath = $debugPath . '/' . $debugFilename;
-                $croppedImage->save($debugFullPath);
+                // Save cropped image
+                $croppedImage->save($croppedImageFullPath);
                 
-                \Log::info("Cropped image saved for debugging", [
-                    'original_coords' => $region,
-                    'scaled_coords' => $scaledRegion,
-                    'debug_path' => $debugFullPath,
-                    'image_dimensions' => ['width' => $image->width(), 'height' => $image->height()]
-                ]);
-
-                // Save the cropped image temporarily with unique name
-                $tempFileName = 'ocr/temp_region_' . $region['id'] . '_' . uniqid() . '.png';
-                $tempPath = Storage::disk('public')->path($tempFileName);
-                
-                // ADDED: Save the cropped image permanently for display
-                $permanentFileName = 'ocr/cropped/' . $ocrResult->id . '/page_' . $this->currentPage . '_region_' . $region['id'] . '.png';
-                $permanentPath = Storage::disk('public')->path($permanentFileName);
-                
-                // Ensure directories exist
-                $tempDir = dirname($tempPath);
-                if (!is_dir($tempDir)) {
-                    mkdir($tempDir, 0755, true);
-                }
-                
-                $permanentDir = dirname($permanentPath);
-                if (!is_dir($permanentDir)) {
-                    mkdir($permanentDir, 0755, true);
-                }
-                
-                // Save the cropped image (both temp and permanent)
-                $croppedImage->save($tempPath);
-                $croppedImage->save($permanentPath);
-                
-                // ADDED: Store permanent image path
+                // Store cropped image info
                 $croppedImages[] = [
                     'region_id' => $region['id'],
                     'page' => $this->currentPage,
-                    'path' => $permanentFileName
+                    'path' => $croppedImagePath,
+                    'coordinates' => $scaledRegion
                 ];
+
+                // Save to temporary file for OCR processing
+                $tempPath = tempnam(sys_get_temp_dir(), 'ocr_region_') . '.png';
+                $croppedImage->save($tempPath);
 
                 // UPDATED: OCR processing with fallback configurations for better table reading
                 try {
@@ -232,7 +216,9 @@ class ProcessRegions implements ShouldQueue
                 ];
 
                 // Clean up temporary file
-                unlink($tempPath);
+                if (file_exists($tempPath)) {
+                    unlink($tempPath);
+                }
             }
 
             // UPDATED: Merge results with existing OCR results for other pages

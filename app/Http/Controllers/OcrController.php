@@ -64,7 +64,8 @@ class OcrController extends Controller
         $result = $this->ocrService->processRegions( // UPDATED: changed from processSelectedRegions()
             $id, 
             $request->regions, 
-            $request->input('previewDimensions')
+            $request->input('previewDimensions'),
+            $request->input('pageRotation') // ADDED: Pass page rotation to service
         );
 
         if ($result['success']) { // UPDATED: check success from result

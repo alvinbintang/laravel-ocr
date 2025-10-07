@@ -940,6 +940,9 @@
                     height: this.previewImage.clientHeight
                 };
 
+                // ADDED: Get current page rotation
+                const currentRotation = pageRotations[this.currentPage] || 0;
+
                 // Send to server
                 fetch('{{ route("ocr.process-regions", $ocrResult->id) }}', {
                     method: 'POST',
@@ -949,7 +952,8 @@
                     },
                     body: JSON.stringify({
                         regions: regionsData,
-                        previewDimensions: previewDimensions // ADDED: Include preview dimensions
+                        previewDimensions: previewDimensions, // ADDED: Include preview dimensions
+                        pageRotation: currentRotation // ADDED: Include current page rotation
                     })
                 })
                 .then(response => response.json())

@@ -143,7 +143,7 @@ class OcrService
      * @return array
      * @throws \Exception
      */
-    public function processRegions(int $id, array $regions, ?array $previewDimensions = null): array
+    public function processRegions(int $id, array $regions, ?array $previewDimensions = null, ?int $pageRotation = null): array
     {
         try {
             $ocrResult = $this->ocrResultRepository->findById($id);

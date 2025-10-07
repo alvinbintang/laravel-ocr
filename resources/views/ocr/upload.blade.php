@@ -139,7 +139,9 @@
                                             {{ $result->created_at->format('d M Y H:i') }}
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                            @if ($result->status === 'awaiting_selection' || $result->status === 'done')
+                                            @if ($result->status === 'done')
+                                            <a href="{{ route('ocr.preview', $result->id) }}" class="text-blue-600 hover:text-blue-900">Lihat Hasil</a>
+                                            @elseif ($result->status === 'awaiting_selection')
                                             <a href="{{ route('ocr.preview', $result->id) }}" class="text-blue-600 hover:text-blue-900">Pilih Area</a>
                                             @elseif ($result->status === 'pending' || $result->status === 'processing')
                                             <a href="{{ route('ocr.status', $result->id) }}" class="text-blue-600 hover:text-blue-900">Cek Status</a>
