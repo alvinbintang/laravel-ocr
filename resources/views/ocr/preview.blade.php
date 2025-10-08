@@ -961,45 +961,6 @@
                 }
             }
 
-            // ADDED: Function to transform coordinates based on rotation
-            transformCoordinatesForRotation(region, rotation, imageWidth, imageHeight) {
-                const x = region.x;
-                const y = region.y;
-                const width = region.width;
-                const height = region.height;
-                
-                switch (rotation) {
-                    case 90:
-                        return {
-                            x: y,
-                            y: imageWidth - x - width,
-                            width: height,
-                            height: width
-                        };
-                    case 180:
-                        return {
-                            x: imageWidth - x - width,
-                            y: imageHeight - y - height,
-                            width: width,
-                            height: height
-                        };
-                    case 270:
-                        return {
-                            x: imageHeight - y - height,
-                            y: x,
-                            width: height,
-                            height: width
-                        };
-                    default: // 0 degrees
-                        return {
-                            x: x,
-                            y: y,
-                            width: width,
-                            height: height
-                        };
-                }
-            }
-
             processRegions() {
                 if (this.regions.length === 0) {
                     alert('Please select at least one region before processing.');
@@ -1012,6 +973,16 @@
                 this.addRegionBtn.disabled = true;
                 this.clearRegionsBtn.disabled = true;
 
+                // Prepare regions data for processing
+                const regionsData = this.regions.map(region => ({
+                    id: region.id,
+                    x: Math.round(region.x),
+                    y: Math.round(region.y),
+                    width: Math.round(region.width),
+                    height: Math.round(region.height),
+                    page: region.page
+                }));
+
                 // ADDED: Capture preview image dimensions for coordinate scaling
                 const previewDimensions = {
                     width: this.previewImage.clientWidth,
@@ -1020,26 +991,6 @@
 
                 // ADDED: Get current page rotation
                 const currentRotation = pageRotations[this.currentPage] || 0;
-
-                // UPDATED: Transform coordinates based on rotation before sending to server
-                const regionsData = this.regions.map(region => {
-                    // First transform coordinates for rotation
-                    const transformedRegion = this.transformCoordinatesForRotation(
-                        region, 
-                        currentRotation, 
-                        previewDimensions.width, 
-                        previewDimensions.height
-                    );
-                    
-                    return {
-                        id: region.id,
-                        x: Math.round(transformedRegion.x),
-                        y: Math.round(transformedRegion.y),
-                        width: Math.round(transformedRegion.width),
-                        height: Math.round(transformedRegion.height),
-                        page: region.page
-                    };
-                });
 
                 // Send to server
                 fetch('{{ route("ocr.process-regions", $ocrResult->id) }}', {

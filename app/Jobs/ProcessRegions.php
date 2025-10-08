@@ -77,16 +77,6 @@ class ProcessRegions implements ShouldQueue
                 // ADDED: Scale coordinates from preview to OCR image dimensions
                 $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
 
-                // ADDED: Log coordinate transformation for debugging
-                \Log::info("Coordinate transformation", [
-                    'region_id' => $region['id'],
-                    'original' => $region,
-                    'scaled' => $scaledRegion,
-                    'ocr_image_size' => ['width' => $ocrImageWidth, 'height' => $ocrImageHeight],
-                    'preview_dimensions' => $this->previewDimensions,
-                    'rotation' => $rotation
-                ]);
-
                 // Crop the region from the image
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
                 
