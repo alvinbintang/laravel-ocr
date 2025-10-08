@@ -33,7 +33,8 @@ class ProcessRegions implements ShouldQueue
     {
         try {
             $ocrResult = OcrResult::findOrFail($this->ocrResultId);
-
+            
+            // ADDED: Debug logging for preview dimensions
             \Log::info("ProcessRegions started", [
                 'ocr_result_id' => $this->ocrResultId,
                 'current_page' => $this->currentPage,
@@ -41,184 +42,216 @@ class ProcessRegions implements ShouldQueue
                 'regions_count' => count($this->regions)
             ]);
 
+            // Get the image path for the specific page
             $imagePaths = $ocrResult->image_paths ?? [];
             if (!isset($imagePaths[$this->currentPage - 1])) {
                 throw new \Exception("Image not found for page {$this->currentPage}");
             }
 
             $imagePath = storage_path('app/public/' . $imagePaths[$this->currentPage - 1]);
-            if (!file_exists($imagePath)) {
-                throw new \Exception("Image file does not exist: {$imagePath}");
-            }
-
-            $image = Image::read($imagePath);
             
-            // UPDATED: Get original image dimensions BEFORE rotation
-            $originalImageWidth = $image->width();
-            $originalImageHeight = $image->height();
-
-            \Log::info("Original image loaded", [
-                'path' => $imagePath,
-                'dimensions' => ['width' => $originalImageWidth, 'height' => $originalImageHeight]
-            ]);
-
-            $pageRotations = $ocrResult->page_rotations ?? [];
-            $rotation = $pageRotations[$this->currentPage] ?? 0;
-
-            // UPDATED: Apply rotation to image first
-            if ($rotation > 0) {
-                \Log::info("Applying rotation to image", [
-                    'rotation' => $rotation,
-                    'before_rotation' => ['width' => $originalImageWidth, 'height' => $originalImageHeight]
-                ]);
-                
-                $image->rotate(-$rotation);
-                
-                \Log::info("Image rotated successfully", [
-                    'after_rotation' => ['width' => $image->width(), 'height' => $image->height()]
-                ]);
-            }
-
-            // Get final image dimensions after rotation
-            $finalImageWidth = $image->width();
-            $finalImageHeight = $image->height();
-
+            // Initialize arrays for results and cropped images
             $results = [];
             $croppedImages = [];
 
-            foreach ($this->regions as $index => $region) {
+            $image = Image::read($imagePath);
+            
+            // ADDED: Apply rotation if exists for current page
+            $pageRotations = $ocrResult->page_rotations ?? [];
+            $rotation = $pageRotations[$this->currentPage] ?? 0;
+            
+            if ($rotation > 0) {
+                $image->rotate(-$rotation); // Negative because CSS rotation is clockwise, image rotation is counter-clockwise
+                \Log::info("Applied rotation to image", [
+                    'page' => $this->currentPage,
+                    'rotation' => $rotation,
+                    'ocr_result_id' => $this->ocrResultId
+                ]);
+            }
+
+            // ADDED: Get actual OCR image dimensions for coordinate scaling
+            $ocrImageWidth = $image->width();
+            $ocrImageHeight = $image->height();
+
+            foreach ($this->regions as $region) {
+                // ADDED: Scale coordinates from preview to OCR image dimensions
+                $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
+
+                // Crop the region from the image
+                $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
+                
+                // Save cropped image for debugging and permanent storage
+                $croppedImageName = "cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
+                $croppedImagePath = "ocr_results/{$this->ocrResultId}/cropped/{$croppedImageName}";
+                $croppedImageFullPath = Storage::disk('public')->path($croppedImagePath);
+                
+                // Ensure directory exists
+                $croppedImageDir = dirname($croppedImageFullPath);
+                if (!is_dir($croppedImageDir)) {
+                    mkdir($croppedImageDir, 0755, true);
+                }
+                
+                // Save cropped image
+                $croppedImage->save($croppedImageFullPath);
+                
+                // Store cropped image info
+                $croppedImages[] = [
+                    'region_id' => $region['id'],
+                    'page' => $this->currentPage,
+                    'path' => $croppedImagePath,
+                    'coordinates' => $scaledRegion
+                ];
+
+                // Save to temporary file for OCR processing
+                $tempPath = tempnam(sys_get_temp_dir(), 'ocr_region_') . '.png';
+                $croppedImage->save($tempPath);
+
+                // UPDATED: OCR processing with fallback configurations for better table reading
                 try {
-                    \Log::info("Processing region {$index}", [
-                        'region_id' => $region['id'],
-                        'original_coordinates' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $region['x'], $region['y'], $region['width'], $region['height'])
-                    ]);
-
-                    // UPDATED: Step 1 - Scale coordinates from preview to original image dimensions
-                    $scaledRegion = $this->scaleCoordinates($region, $originalImageWidth, $originalImageHeight);
-
-                    // UPDATED: Step 2 - Apply rotation to coordinates (using original dimensions)
-                    $rotatedRegion = $this->rotateCoordinates($scaledRegion, $originalImageWidth, $originalImageHeight, $rotation);
-
-                    // UPDATED: Step 3 - Validate and clamp coordinates to final image bounds
-                    $finalRegion = $this->validateAndClampCoordinates($rotatedRegion, $finalImageWidth, $finalImageHeight);
-
-                    // UPDATED: Crop the image using final coordinates
-                    $croppedImage = $image->crop(
-                        $finalRegion['width'], 
-                        $finalRegion['height'], 
-                        $finalRegion['x'], 
-                        $finalRegion['y']
-                    );
-
-                    // UPDATED: Save cropped image with high DPI (300) for better OCR accuracy
-                    $croppedDir = storage_path("app/public/ocr_results/{$this->ocrResultId}/cropped");
-                    if (!is_dir($croppedDir)) {
-                        mkdir($croppedDir, 0755, true);
+                    // Primary configuration: PSM 6 (single uniform block of text)
+                    $tesseract = new TesseractOCR($tempPath);
+                    $tesseract->lang('ind+eng')
+                        ->psm(6) // Page segmentation mode: Assume a single uniform block of text
+                        ->oem(1) // OCR Engine mode: Neural nets LSTM only
+                        ->format('tsv')
+                        ->config('tessedit_char_whitelist', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,;:\'"-()\[\]{}!?@#$%^&*+=<>/\\| ')
+                        ->dpi(300); // Higher DPI for better recognition
+                    
+                    // Run OCR
+                    $tsv = $tesseract->run();
+                    
+                    // ADDED: Parse TSV output to maintain table structure
+                    $text = $this->parseTsvOutput($tsv);
+                    
+                    // Check if we got reasonable results (minimum text length)
+                    if (strlen(trim($text)) < 3) {
+                        throw new \Exception("Insufficient text detected with PSM 6");
                     }
-
-                    $croppedImagePath = "{$croppedDir}/page_{$this->currentPage}_region_{$region['id']}.png";
                     
-                    // Save with high quality and DPI for OCR
-                    $croppedImage->toPng()->save($croppedImagePath);
-
-                    \Log::info("Cropped image saved", [
+                    \Log::info("OCR successful with PSM 6", [
                         'region_id' => $region['id'],
-                        'path' => $croppedImagePath,
-                        'final_coordinates' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $finalRegion['x'], $finalRegion['y'], $finalRegion['width'], $finalRegion['height'])
+                        'text_length' => strlen($text)
                     ]);
-
-                    // Store cropped image info
-                    $croppedImages[] = [
-                        'region_id' => $region['id'],
-                        'page' => $this->currentPage,
-                        'path' => str_replace(storage_path('app/public/'), '', $croppedImagePath),
-                        'coordinates' => $finalRegion
-                    ];
-
-                    // UPDATED: Perform OCR with fallback PSM modes and high DPI
-                    $ocrText = $this->performOcrWithFallback($croppedImagePath, $region['id']);
-
-                    // Add to results
-                    $results[] = [
-                        'region_id' => $region['id'],
-                        'page' => $this->currentPage,
-                        'coordinates' => [
-                            'x' => $finalRegion['x'],
-                            'y' => $finalRegion['y'],
-                            'width' => $finalRegion['width'],
-                            'height' => $finalRegion['height']
-                        ],
-                        'original_coordinates' => [
-                            'x' => $region['x'],
-                            'y' => $region['y'],
-                            'width' => $region['width'],
-                            'height' => $region['height']
-                        ],
-                        'text' => $ocrText
-                    ];
-
-                    \Log::info("OCR completed for region", [
-                        'region_id' => $region['id'],
-                        'text_length' => strlen($ocrText),
-                        'text_preview' => substr($ocrText, 0, 100) . (strlen($ocrText) > 100 ? '...' : '')
-                    ]);
-
+                    
                 } catch (\Exception $e) {
-                    \Log::error("Failed to process region {$index}", [
+                    \Log::warning("OCR failed with PSM 6, trying PSM 4", [
                         'region_id' => $region['id'],
-                        'error' => $e->getMessage(),
-                        'trace' => $e->getTraceAsString()
+                        'error' => $e->getMessage()
                     ]);
                     
-                    // Continue processing other regions
-                    continue;
+                    try {
+                        // ADDED: Fallback 1: PSM 4 (single column of text of variable sizes)
+                        $tesseract = new TesseractOCR($tempPath);
+                        $tesseract->lang('ind+eng')
+                            ->psm(4)
+                            ->oem(1)
+                            ->format('tsv')
+                            ->config('tessedit_char_whitelist', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,;:\'"-()\[\]{}!?@#$%^&*+=<>/\\| ')
+                            ->dpi(300);
+                        
+                        $tsv = $tesseract->run();
+                        $text = $this->parseTsvOutput($tsv);
+                        
+                        if (strlen(trim($text)) < 3) {
+                            throw new \Exception("Insufficient text detected with PSM 4");
+                        }
+                        
+                        \Log::info("OCR successful with PSM 4 fallback", [
+                            'region_id' => $region['id'],
+                            'text_length' => strlen($text)
+                        ]);
+                        
+                    } catch (\Exception $e2) {
+                        \Log::warning("OCR failed with PSM 4, trying PSM 11", [
+                            'region_id' => $region['id'],
+                            'error' => $e2->getMessage()
+                        ]);
+                        
+                        try {
+                            // ADDED: Fallback 2: PSM 11 (sparse text)
+                            $tesseract = new TesseractOCR($tempPath);
+                            $tesseract->lang('ind+eng')
+                                ->psm(11)
+                                ->oem(1)
+                                ->format('tsv')
+                                ->config('tessedit_char_whitelist', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,;:\'"-()\[\]{}!?@#$%^&*+=<>/\\| ')
+                                ->dpi(300);
+                            
+                            $tsv = $tesseract->run();
+                            $text = $this->parseTsvOutput($tsv);
+                            
+                            \Log::info("OCR completed with PSM 11 fallback", [
+                                'region_id' => $region['id'],
+                                'text_length' => strlen($text)
+                            ]);
+                            
+                        } catch (\Exception $e3) {
+                            \Log::error("All OCR configurations failed", [
+                                'region_id' => $region['id'],
+                                'errors' => [$e->getMessage(), $e2->getMessage(), $e3->getMessage()]
+                            ]);
+                            
+                            $text = "OCR processing failed for this region";
+                        }
+                    }
+                }
+
+                // UPDATED: Add page information to results with scaled coordinates
+                $results[] = [
+                    'region_id' => $region['id'],
+                    'page' => $this->currentPage, // ADDED: Page information
+                    'coordinates' => [
+                        'x' => $scaledRegion['x'], // UPDATED: Use scaled coordinates
+                        'y' => $scaledRegion['y'], // UPDATED: Use scaled coordinates
+                        'width' => $scaledRegion['width'], // UPDATED: Use scaled coordinates
+                        'height' => $scaledRegion['height'] // UPDATED: Use scaled coordinates
+                    ],
+                    'original_coordinates' => [ // ADDED: Keep original preview coordinates for reference
+                        'x' => $region['x'],
+                        'y' => $region['y'],
+                        'width' => $region['width'],
+                        'height' => $region['height']
+                    ],
+                    'text' => trim($text)
+                ];
+
+                // Clean up temporary file
+                if (file_exists($tempPath)) {
+                    unlink($tempPath);
                 }
             }
 
             // UPDATED: Merge results with existing OCR results for other pages
             $existingResults = $ocrResult->ocr_results ?? [];
-            $existingCroppedImages = $ocrResult->cropped_images ?? [];
+            $existingCroppedImages = $ocrResult->cropped_images ?? []; // ADDED: Get existing cropped images
             
             // Remove existing results for this page
             $existingResults = array_filter($existingResults, function($result) {
                 return !isset($result['page']) || $result['page'] != $this->currentPage;
             });
             
-            // Remove existing cropped images for this page
+            // ADDED: Remove existing cropped images for this page
             $existingCroppedImages = array_filter($existingCroppedImages, function($image) {
                 return !isset($image['page']) || $image['page'] != $this->currentPage;
             });
             
             // Add new results for this page
             $allResults = array_merge($existingResults, $results);
-            $allCroppedImages = array_merge($existingCroppedImages, $croppedImages);
+            $allCroppedImages = array_merge($existingCroppedImages, $croppedImages); // ADDED: Merge cropped images
 
             // Update the OCR result
             $ocrResult->update([
                 'status' => 'done',
                 'selected_regions' => $this->regions,
                 'ocr_results' => $allResults,
-                'cropped_images' => $allCroppedImages
-            ]);
-
-            \Log::info("ProcessRegions completed successfully", [
-                'ocr_result_id' => $this->ocrResultId,
-                'processed_regions' => count($results)
+                'cropped_images' => $allCroppedImages // ADDED: Save cropped images
             ]);
 
         } catch (\Exception $e) {
-            \Log::error("ProcessRegions failed", [
-                'ocr_result_id' => $this->ocrResultId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            
             $ocrResult->update([
                 'status' => 'error',
                 'ocr_results' => ['error' => $e->getMessage()]
             ]);
-            
-            throw $e;
         }
     }
 
@@ -241,15 +274,11 @@ class ProcessRegions implements ShouldQueue
         return null;
     }
 
-    // UPDATED: Enhanced helper method to scale coordinates from preview to OCR image dimensions with validation
+    // ADDED: Helper method to scale coordinates from preview to OCR image dimensions
     private function scaleCoordinates(array $region, int $ocrImageWidth, int $ocrImageHeight): array
     {
         // If no preview dimensions provided, return original coordinates (fallback)
         if (!$this->previewDimensions || !isset($this->previewDimensions['width']) || !isset($this->previewDimensions['height'])) {
-            \Log::warning("No preview dimensions provided, using original coordinates", [
-                'region_id' => $region['id'],
-                'coordinates' => $region
-            ]);
             return $region;
         }
 
@@ -260,20 +289,8 @@ class ProcessRegions implements ShouldQueue
         $scaleX = $ocrImageWidth / $previewWidth;
         $scaleY = $ocrImageHeight / $previewHeight;
 
-        // ADDED: Check for significant scaling factor differences (>10% difference)
-        $scaleDifference = abs($scaleX - $scaleY) / max($scaleX, $scaleY);
-        if ($scaleDifference > 0.1) {
-            \Log::warning("Coordinate mismatch — scaling factor may be inaccurate", [
-                'scale_x' => $scaleX,
-                'scale_y' => $scaleY,
-                'difference_percentage' => $scaleDifference * 100,
-                'preview_dimensions' => ['width' => $previewWidth, 'height' => $previewHeight],
-                'ocr_dimensions' => ['width' => $ocrImageWidth, 'height' => $ocrImageHeight]
-            ]);
-        }
-
         // Apply scaling to coordinates
-        $scaledRegion = [
+        return [
             'id' => $region['id'],
             'x' => (int) round($region['x'] * $scaleX),
             'y' => (int) round($region['y'] * $scaleY),
@@ -281,163 +298,6 @@ class ProcessRegions implements ShouldQueue
             'height' => (int) round($region['height'] * $scaleY),
             'page' => $region['page'] ?? $this->currentPage
         ];
-
-        \Log::info("Scaling region from preview -> OCR image", [
-            'region_id' => $region['id'],
-            'original' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $region['x'], $region['y'], $region['width'], $region['height']),
-            'scaled' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $scaledRegion['x'], $scaledRegion['y'], $scaledRegion['width'], $scaledRegion['height']),
-            'scale_factors' => ['x' => $scaleX, 'y' => $scaleY]
-        ]);
-
-        return $scaledRegion;
-    }
-
-    // ADDED: Helper method to rotate coordinates based on image rotation
-    private function rotateCoordinates(array $region, int $imageWidth, int $imageHeight, int $rotation): array
-    {
-        $x = $region['x'];
-        $y = $region['y'];
-        $width = $region['width'];
-        $height = $region['height'];
-
-        // Normalize rotation to 0-359 degrees
-        $rotation = $rotation % 360;
-        if ($rotation < 0) $rotation += 360;
-
-        $rotatedRegion = $region; // Start with original region
-
-        switch ($rotation) {
-            case 90:
-                // 90° clockwise: (x,y) -> (y, imageWidth - x - width)
-                $rotatedRegion['x'] = $y;
-                $rotatedRegion['y'] = $imageWidth - $x - $width;
-                $rotatedRegion['width'] = $height;
-                $rotatedRegion['height'] = $width;
-                break;
-
-            case 180:
-                // 180°: (x,y) -> (imageWidth - x - width, imageHeight - y - height)
-                $rotatedRegion['x'] = $imageWidth - $x - $width;
-                $rotatedRegion['y'] = $imageHeight - $y - $height;
-                // width and height remain the same
-                break;
-
-            case 270:
-                // 270° clockwise: (x,y) -> (imageHeight - y - height, x)
-                $rotatedRegion['x'] = $imageHeight - $y - $height;
-                $rotatedRegion['y'] = $x;
-                $rotatedRegion['width'] = $height;
-                $rotatedRegion['height'] = $width;
-                break;
-
-            default:
-                // No rotation or unsupported angle
-                break;
-        }
-
-        \Log::info("Applying rotation {$rotation}° -> adjusted coordinates", [
-            'region_id' => $region['id'],
-            'rotation' => $rotation,
-            'original' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $x, $y, $width, $height),
-            'rotated' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $rotatedRegion['x'], $rotatedRegion['y'], $rotatedRegion['width'], $rotatedRegion['height']),
-            'image_dimensions' => ['width' => $imageWidth, 'height' => $imageHeight]
-        ]);
-
-        return $rotatedRegion;
-    }
-
-    // ADDED: Helper method to validate and clamp coordinates within image bounds
-    private function validateAndClampCoordinates(array $region, int $imageWidth, int $imageHeight): array
-    {
-        $originalRegion = $region;
-        
-        // Ensure coordinates are not negative
-        $region['x'] = max(0, $region['x']);
-        $region['y'] = max(0, $region['y']);
-        
-        // Ensure region doesn't exceed image bounds
-        $region['width'] = min($region['width'], $imageWidth - $region['x']);
-        $region['height'] = min($region['height'], $imageHeight - $region['y']);
-        
-        // Ensure minimum dimensions
-        $region['width'] = max(1, $region['width']);
-        $region['height'] = max(1, $region['height']);
-
-        // Log if coordinates were clamped
-        if ($originalRegion !== $region) {
-            \Log::warning("Coordinates clamped to image bounds", [
-                'region_id' => $region['id'],
-                'original' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $originalRegion['x'], $originalRegion['y'], $originalRegion['width'], $originalRegion['height']),
-                'clamped' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $region['x'], $region['y'], $region['width'], $region['height']),
-                'image_bounds' => ['width' => $imageWidth, 'height' => $imageHeight]
-            ]);
-        }
-
-        return $region;
-    }
-
-    /**
-     * ADDED: Perform OCR with fallback PSM modes and high DPI for better accuracy
-     */
-    private function performOcrWithFallback(string $imagePath, int $regionId): string
-    {
-        $psmModes = [6, 4, 11]; // PSM 6 (uniform block), PSM 4 (single column), PSM 11 (sparse text)
-        
-        foreach ($psmModes as $psm) {
-            try {
-                \Log::info("Attempting OCR with PSM {$psm}", [
-                    'region_id' => $regionId,
-                    'image_path' => $imagePath
-                ]);
-                
-                $tesseract = new TesseractOCR($imagePath);
-                $tesseract->lang('ind+eng')
-                    ->psm($psm)
-                    ->oem(1) // Neural nets LSTM only
-                    ->format('tsv')
-                    ->config('tessedit_char_whitelist', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,;:\'\"-()\[\]{}!?@#$%^&*+=<>/\\| ')
-                    ->dpi(300); // High DPI for better accuracy
-                
-                $tsv = $tesseract->run();
-                
-                if (empty($tsv)) {
-                    throw new \Exception("Empty TSV output from Tesseract");
-                }
-                
-                $text = $this->parseTsvOutput($tsv);
-                
-                // Check if we got reasonable results (minimum text length)
-                if (strlen(trim($text)) >= 3) {
-                    \Log::info("OCR successful with PSM {$psm}", [
-                        'region_id' => $regionId,
-                        'text_length' => strlen($text),
-                        'text_preview' => substr($text, 0, 50) . (strlen($text) > 50 ? '...' : '')
-                    ]);
-                    
-                    return trim($text);
-                }
-                
-                throw new \Exception("Insufficient text detected (length: " . strlen(trim($text)) . ")");
-                
-            } catch (\Exception $e) {
-                \Log::warning("OCR failed with PSM {$psm}", [
-                    'region_id' => $regionId,
-                    'psm' => $psm,
-                    'error' => $e->getMessage()
-                ]);
-                
-                // Continue to next PSM mode
-                continue;
-            }
-        }
-        
-        // If all PSM modes failed, return error message
-        \Log::error("All OCR PSM modes failed", [
-            'region_id' => $regionId,
-            'attempted_psm_modes' => $psmModes
-        ]);
-        
-        return "OCR processing failed for this region";
     }
 
     // UPDATED: Improved method to parse TSV output from Tesseract with line-based grouping for table structure
