@@ -6,6 +6,37 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Preview - Laravel OCR</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loading-spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Ensure rotated images don't get clipped */
+        #image-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: visible !important;
+        }
+        
+        #preview-image {
+            transition: transform 0.3s ease-in-out;
+            transform-origin: center center;
+            max-width: none !important;
+            max-height: 80vh;
+        }
+    </style>
 </head>
 <body class="bg-gray-100">
     <div class="min-h-screen">
@@ -107,7 +138,7 @@
                         <!-- Image Preview Container -->
                         <div class="relative mb-6" id="image-preview-container">
                             <!-- Rotation Controls -->
-                            <div class="flex justify-end mb-4 pr-4">
+                            <div class="flex justify-start mb-4 pr-4">
                                 <div class="flex space-x-2">
                                     <button id="rotate-left-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm flex items-center shadow-md transition-colors">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -183,10 +214,28 @@
                                 // Apply rotation to current page
                                 function applyCurrentPageRotation() {
                                     const previewImage = document.getElementById('preview-image');
-                                    if (!previewImage) return;
+                                    const imageContainer = document.getElementById('image-container');
+                                    if (!previewImage || !imageContainer) return;
                                     
                                     const rotation = pageRotations[currentPage] || 0;
+                                    
+                                    // Calculate container size based on rotation
+                                    const rect = previewImage.getBoundingClientRect();
+                                    const isRotated90or270 = (rotation % 180) !== 0;
+                                    
+                                    // Apply rotation with proper transform origin
                                     previewImage.style.transform = `rotate(${rotation}deg)`;
+                                    
+                                    // Adjust container height to accommodate rotated image
+                                    if (isRotated90or270) {
+                                        // When rotated 90 or 270 degrees, we need more space
+                                        const naturalWidth = previewImage.naturalWidth || previewImage.width;
+                                        const naturalHeight = previewImage.naturalHeight || previewImage.height;
+                                        const maxDimension = Math.max(naturalWidth, naturalHeight);
+                                        imageContainer.style.minHeight = `${Math.max(400, maxDimension * 0.5)}px`;
+                                    } else {
+                                        imageContainer.style.minHeight = '400px';
+                                    }
                                     
                                     // Update RegionSelector's currentPage if it exists
                                     if (window.regionSelector && window.regionSelector.currentPage !== currentPage) {
@@ -217,10 +266,10 @@
                                     });
                                 }
                             </script>
-                            <div id="image-container" class="relative border border-gray-300 rounded overflow-hidden">
-                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto" style="display: none;">
+                            <div id="image-container" class="relative border border-gray-300 rounded flex justify-center items-center" style="min-height: 400px; overflow: visible;">
+                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto transition-transform duration-300" style="display: none; transform-origin: center center;">
                                 <!-- UPDATED: Improved loading placeholder with spinner -->
-                                <div id="loading-placeholder" class="flex items-center justify-center bg-gray-100 h-96">
+                                <div id="loading-placeholder" class="flex items-center justify-center bg-gray-100 h-96 w-full">
                                     <div class="text-center">
                                         <div class="loading-spinner"></div>
                                         <p class="text-gray-600">Loading page {{ $currentPage ?? 1 }} of {{ $ocrResult->page_count ?? 1 }}...</p>
