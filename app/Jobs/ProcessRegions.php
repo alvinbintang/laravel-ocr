@@ -78,10 +78,11 @@ class ProcessRegions implements ShouldQueue
                 // ADDED: Scale coordinates from preview to OCR image dimensions
                 $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
 
-                // ADDED: Transform coordinates based on image rotation
+                // UPDATED: Apply inverse transformation first if image is rotated
+                // Frontend sends coordinates relative to rotated view, we need to convert back to original image coordinates
                 if ($rotation > 0) {
-                    $scaledRegion = $this->transformCoordinatesForRotation($scaledRegion, $ocrImageWidth, $ocrImageHeight, $rotation);
-                    \Log::info("Applied coordinate transformation for rotation", [
+                    $scaledRegion = $this->inverseTransformCoordinatesForRotation($scaledRegion, $ocrImageWidth, $ocrImageHeight, $rotation);
+                    \Log::info("Applied inverse coordinate transformation for rotation", [
                         'page' => $this->currentPage,
                         'rotation' => $rotation,
                         'original_coords' => [
@@ -90,7 +91,7 @@ class ProcessRegions implements ShouldQueue
                             'width' => $region['width'],
                             'height' => $region['height']
                         ],
-                        'transformed_coords' => [
+                        'inverse_transformed_coords' => [
                             'x' => $scaledRegion['x'],
                             'y' => $scaledRegion['y'],
                             'width' => $scaledRegion['width'],
@@ -318,6 +319,64 @@ class ProcessRegions implements ShouldQueue
             'y' => (int) round($region['y'] * $scaleY),
             'width' => (int) round($region['width'] * $scaleX),
             'height' => (int) round($region['height'] * $scaleY),
+            'page' => $region['page'] ?? $this->currentPage
+        ];
+    }
+
+    // UPDATED: Helper method to apply inverse coordinate transformation for rotated images
+    // This converts coordinates from rotated view back to original image coordinates
+    private function inverseTransformCoordinatesForRotation(array $region, int $imageWidth, int $imageHeight, int $rotation): array
+    {
+        $x = $region['x'];
+        $y = $region['y'];
+        $width = $region['width'];
+        $height = $region['height'];
+
+        // Normalize rotation to 0-359 degrees
+        $rotation = $rotation % 360;
+        if ($rotation < 0) $rotation += 360;
+
+        // Apply inverse transformation (opposite of what was applied to the image)
+        switch ($rotation) {
+            case 90:
+                // Inverse of 90 degrees clockwise: (x,y) -> (imageHeight - y - height, x)
+                $newX = $imageHeight - $y - $height;
+                $newY = $x;
+                $newWidth = $height;
+                $newHeight = $width;
+                break;
+                
+            case 180:
+                // Inverse of 180 degrees: (x,y) -> (imageWidth - x - width, imageHeight - y - height)
+                $newX = $imageWidth - $x - $width;
+                $newY = $imageHeight - $y - $height;
+                $newWidth = $width;
+                $newHeight = $height;
+                break;
+                
+            case 270:
+                // Inverse of 270 degrees clockwise: (x,y) -> (y, imageWidth - x - width)
+                $newX = $y;
+                $newY = $imageWidth - $x - $width;
+                $newWidth = $height;
+                $newHeight = $width;
+                break;
+                
+            default:
+                // No rotation or unsupported angle
+                $newX = $x;
+                $newY = $y;
+                $newWidth = $width;
+                $newHeight = $height;
+                break;
+        }
+
+        return [
+            'id' => $region['id'],
+            'x' => (int) round($newX),
+            'y' => (int) round($newY),
+            'width' => (int) round($newWidth),
+            'height' => (int) round($newHeight),
             'page' => $region['page'] ?? $this->currentPage
         ];
     }
