@@ -107,7 +107,7 @@
                         <!-- Image Preview Container -->
                         <div class="relative mb-6" id="image-preview-container">
                             <!-- Rotation Controls -->
-                            <div class="flex justify-start mb-4 pr-4">
+                            <div class="flex justify-end mb-4 pr-4">
                                 <div class="flex space-x-2">
                                     <button id="rotate-left-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm flex items-center shadow-md transition-colors">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -203,11 +203,6 @@
                                     } else {
                                         // For 0° and 180° rotations, use default height
                                         imageContainer.style.minHeight = '400px';
-                                    }
-                                    
-                                    // UPDATED: Update region display when rotation changes
-                                    if (window.regionManager) {
-                                        window.regionManager.updateRegionsDisplay();
                                     }
                                     
                                     // Update RegionSelector's currentPage if it exists
@@ -711,15 +706,12 @@
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
 
-                // UPDATED: Convert screen coordinates to image coordinates considering rotation
-                const imageCoords = this.screenToImageCoordinates(x, y);
-
                 this.isDrawing = true;
                 this.drawingRegion = {
-                    startX: imageCoords.x,
-                    startY: imageCoords.y,
-                    currentX: imageCoords.x,
-                    currentY: imageCoords.y,
+                    startX: x,
+                    startY: y,
+                    currentX: x,
+                    currentY: y,
                     page: this.currentPage
                 };
 
@@ -733,11 +725,8 @@
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
 
-                // UPDATED: Convert screen coordinates to image coordinates considering rotation
-                const imageCoords = this.screenToImageCoordinates(x, y);
-
-                this.drawingRegion.currentX = imageCoords.x;
-                this.drawingRegion.currentY = imageCoords.y;
+                this.drawingRegion.currentX = x;
+                this.drawingRegion.currentY = y;
 
                 this.updateDrawingPreview();
             }
@@ -770,13 +759,10 @@
                 const width = Math.abs(this.drawingRegion.currentX - this.drawingRegion.startX);
                 const height = Math.abs(this.drawingRegion.currentY - this.drawingRegion.startY);
 
-                // UPDATED: Convert image coordinates back to screen coordinates for display
-                const screenCoords = this.imageToScreenCoordinates(left, top, width, height);
-
-                preview.style.left = screenCoords.x + 'px';
-                preview.style.top = screenCoords.y + 'px';
-                preview.style.width = screenCoords.width + 'px';
-                preview.style.height = screenCoords.height + 'px';
+                preview.style.left = left + 'px';
+                preview.style.top = top + 'px';
+                preview.style.width = width + 'px';
+                preview.style.height = height + 'px';
 
                 this.regionsOverlay.appendChild(preview);
             }
@@ -854,14 +840,10 @@
             createRegionElement(region, displayNumber) {
                 const regionDiv = document.createElement('div');
                 regionDiv.className = 'region-container';
-                
-                // UPDATED: Convert image coordinates to screen coordinates for display
-                const screenCoords = this.imageToScreenCoordinates(region.x, region.y, region.width, region.height);
-                
-                regionDiv.style.left = screenCoords.x + 'px';
-                regionDiv.style.top = screenCoords.y + 'px';
-                regionDiv.style.width = screenCoords.width + 'px';
-                regionDiv.style.height = screenCoords.height + 'px';
+                regionDiv.style.left = region.x + 'px';
+                regionDiv.style.top = region.y + 'px';
+                regionDiv.style.width = region.width + 'px';
+                regionDiv.style.height = region.height + 'px';
                 regionDiv.dataset.regionId = region.id;
 
                 // Region number
@@ -1058,103 +1040,6 @@
                 
                 // Start polling
                 setTimeout(checkStatus, 2000);
-            }
-
-            // ADDED: Helper methods for coordinate conversion between image and screen space
-            screenToImageCoordinates(screenX, screenY) {
-                const previewImage = document.getElementById('preview-image');
-                if (!previewImage) return { x: screenX, y: screenY };
-
-                const rotation = pageRotations[this.currentPage] || 0;
-                const imageRect = previewImage.getBoundingClientRect();
-                const containerRect = this.imageContainer.getBoundingClientRect();
-
-                // Get relative position within the image
-                const relativeX = screenX - (imageRect.left - containerRect.left);
-                const relativeY = screenY - (imageRect.top - containerRect.top);
-
-                // Convert to image coordinates based on rotation
-                const imageWidth = previewImage.naturalWidth || previewImage.offsetWidth;
-                const imageHeight = previewImage.naturalHeight || previewImage.offsetHeight;
-                const displayWidth = imageRect.width;
-                const displayHeight = imageRect.height;
-
-                // Scale to image dimensions
-                let imageX = (relativeX / displayWidth) * imageWidth;
-                let imageY = (relativeY / displayHeight) * imageHeight;
-
-                // Apply inverse rotation to get original image coordinates
-                switch (rotation) {
-                    case 90:
-                        return {
-                            x: imageY,
-                            y: imageWidth - imageX
-                        };
-                    case 180:
-                        return {
-                            x: imageWidth - imageX,
-                            y: imageHeight - imageY
-                        };
-                    case 270:
-                        return {
-                            x: imageHeight - imageY,
-                            y: imageX
-                        };
-                    default:
-                        return { x: imageX, y: imageY };
-                }
-            }
-
-            imageToScreenCoordinates(imageX, imageY, imageWidth, imageHeight) {
-                const previewImage = document.getElementById('preview-image');
-                if (!previewImage) return { x: imageX, y: imageY, width: imageWidth, height: imageHeight };
-
-                const rotation = pageRotations[this.currentPage] || 0;
-                const imageRect = previewImage.getBoundingClientRect();
-                const containerRect = this.imageContainer.getBoundingClientRect();
-
-                const imgWidth = previewImage.naturalWidth || previewImage.offsetWidth;
-                const imgHeight = previewImage.naturalHeight || previewImage.offsetHeight;
-                const displayWidth = imageRect.width;
-                const displayHeight = imageRect.height;
-
-                // Apply rotation to coordinates
-                let rotatedX = imageX;
-                let rotatedY = imageY;
-                let rotatedWidth = imageWidth;
-                let rotatedHeight = imageHeight;
-
-                switch (rotation) {
-                    case 90:
-                        rotatedX = imgWidth - imageY - imageHeight;
-                        rotatedY = imageX;
-                        rotatedWidth = imageHeight;
-                        rotatedHeight = imageWidth;
-                        break;
-                    case 180:
-                        rotatedX = imgWidth - imageX - imageWidth;
-                        rotatedY = imgHeight - imageY - imageHeight;
-                        break;
-                    case 270:
-                        rotatedX = imageY;
-                        rotatedY = imgHeight - imageX - imageWidth;
-                        rotatedWidth = imageHeight;
-                        rotatedHeight = imageWidth;
-                        break;
-                }
-
-                // Scale to display dimensions and position relative to container
-                const scaleX = displayWidth / imgWidth;
-                const scaleY = displayHeight / imgHeight;
-                const offsetX = imageRect.left - containerRect.left;
-                const offsetY = imageRect.top - containerRect.top;
-
-                return {
-                    x: (rotatedX * scaleX) + offsetX,
-                    y: (rotatedY * scaleY) + offsetY,
-                    width: rotatedWidth * scaleX,
-                    height: rotatedHeight * scaleY
-                };
             }
         }
 
