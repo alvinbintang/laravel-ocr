@@ -157,7 +157,7 @@ class OcrService
             
             // Process each page's regions separately
             foreach ($regionsByPage as $page => $pageRegions) {
-                ProcessRegions::dispatch($id, $pageRegions, (int)$page, $previewDimensions);
+                ProcessRegions::dispatch($id, $pageRegions, (int)$page, $previewDimensions, $pageRotation);
             }
 
             return [

@@ -20,13 +20,15 @@ class ProcessRegions implements ShouldQueue
     protected $regions;
     protected $currentPage; // ADDED: Track current page
     protected $previewDimensions; // ADDED: Store preview dimensions for scaling
+    protected $pageRotation; // ADDED: Store page rotation
 
-    public function __construct($ocrResultId, array $regions, int $currentPage = 1, array $previewDimensions = null)
+    public function __construct($ocrResultId, array $regions, int $currentPage = 1, array $previewDimensions = null, ?int $pageRotation = null)
     {
         $this->ocrResultId = $ocrResultId;
         $this->regions = $regions;
         $this->currentPage = $currentPage; // ADDED: Store current page
         $this->previewDimensions = $previewDimensions; // ADDED: Store preview dimensions
+        $this->pageRotation = $pageRotation; // ADDED: Store page rotation
     }
 
     public function handle(): void
@@ -56,9 +58,8 @@ class ProcessRegions implements ShouldQueue
 
             $image = Image::read($imagePath);
             
-            // ADDED: Apply rotation if exists for current page
-            $pageRotations = $ocrResult->page_rotations ?? [];
-            $rotation = $pageRotations[$this->currentPage] ?? 0;
+            // UPDATED: Use page rotation parameter instead of reading from database
+            $rotation = $this->pageRotation ?? 0;
             
             if ($rotation > 0) {
                 $image->rotate(-$rotation); // Negative because CSS rotation is clockwise, image rotation is counter-clockwise
@@ -76,6 +77,27 @@ class ProcessRegions implements ShouldQueue
             foreach ($this->regions as $region) {
                 // ADDED: Scale coordinates from preview to OCR image dimensions
                 $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
+
+                // ADDED: Transform coordinates based on image rotation
+                if ($rotation > 0) {
+                    $scaledRegion = $this->transformCoordinatesForRotation($scaledRegion, $ocrImageWidth, $ocrImageHeight, $rotation);
+                    \Log::info("Applied coordinate transformation for rotation", [
+                        'page' => $this->currentPage,
+                        'rotation' => $rotation,
+                        'original_coords' => [
+                            'x' => $region['x'],
+                            'y' => $region['y'],
+                            'width' => $region['width'],
+                            'height' => $region['height']
+                        ],
+                        'transformed_coords' => [
+                            'x' => $scaledRegion['x'],
+                            'y' => $scaledRegion['y'],
+                            'width' => $scaledRegion['width'],
+                            'height' => $scaledRegion['height']
+                        ]
+                    ]);
+                }
 
                 // Crop the region from the image
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
@@ -296,6 +318,62 @@ class ProcessRegions implements ShouldQueue
             'y' => (int) round($region['y'] * $scaleY),
             'width' => (int) round($region['width'] * $scaleX),
             'height' => (int) round($region['height'] * $scaleY),
+            'page' => $region['page'] ?? $this->currentPage
+        ];
+    }
+
+    // ADDED: Helper method to transform coordinates based on image rotation
+    private function transformCoordinatesForRotation(array $region, int $imageWidth, int $imageHeight, int $rotation): array
+    {
+        $x = $region['x'];
+        $y = $region['y'];
+        $width = $region['width'];
+        $height = $region['height'];
+
+        // Normalize rotation to 0-359 degrees
+        $rotation = $rotation % 360;
+        if ($rotation < 0) $rotation += 360;
+
+        switch ($rotation) {
+            case 90:
+                // 90 degrees clockwise: (x,y) -> (y, imageWidth - x - width)
+                $newX = $y;
+                $newY = $imageWidth - $x - $width;
+                $newWidth = $height;
+                $newHeight = $width;
+                break;
+                
+            case 180:
+                // 180 degrees: (x,y) -> (imageWidth - x - width, imageHeight - y - height)
+                $newX = $imageWidth - $x - $width;
+                $newY = $imageHeight - $y - $height;
+                $newWidth = $width;
+                $newHeight = $height;
+                break;
+                
+            case 270:
+                // 270 degrees clockwise (or 90 counter-clockwise): (x,y) -> (imageHeight - y - height, x)
+                $newX = $imageHeight - $y - $height;
+                $newY = $x;
+                $newWidth = $height;
+                $newHeight = $width;
+                break;
+                
+            default:
+                // No rotation or unsupported angle
+                $newX = $x;
+                $newY = $y;
+                $newWidth = $width;
+                $newHeight = $height;
+                break;
+        }
+
+        return [
+            'id' => $region['id'],
+            'x' => (int) round($newX),
+            'y' => (int) round($newY),
+            'width' => (int) round($newWidth),
+            'height' => (int) round($newHeight),
             'page' => $region['page'] ?? $this->currentPage
         ];
     }
