@@ -37,7 +37,7 @@ class ProcessRegions implements ShouldQueue
             $ocrResult = OcrResult::findOrFail($this->ocrResultId);
             
             // ADDED: Debug logging for preview dimensions
-            \Log::info("ProcessRegions started", [
+            \Illuminate\Support\Facades\Log::info("ProcessRegions started", [
                 'ocr_result_id' => $this->ocrResultId,
                 'current_page' => $this->currentPage,
                 'preview_dimensions' => $this->previewDimensions,
@@ -68,26 +68,33 @@ class ProcessRegions implements ShouldQueue
             $rotation = $this->pageRotations[$this->currentPage] ?? 0;
             
             if ($rotation > 0) {
-                // Calculate size of new canvas needed to fit rotated image
-                $diagonal = ceil(sqrt(pow($originalWidth, 2) + pow($originalHeight, 2)));
+                // Calculate the dimensions needed for the rotated image with padding
+                $padding = 100; // Add padding to ensure no truncation
+                $angle = deg2rad($rotation);
+                $cosAngle = abs(cos($angle));
+                $sinAngle = abs(sin($angle));
                 
-                // Create new square canvas large enough to hold rotated image
-                $newCanvas = Image::canvas($diagonal, $diagonal);
+                // Calculate dimensions that will contain the entire rotated image
+                $newWidth = ceil($originalWidth * $cosAngle + $originalHeight * $sinAngle) + (2 * $padding);
+                $newHeight = ceil($originalHeight * $cosAngle + $originalWidth * $sinAngle) + (2 * $padding);
                 
-                // Calculate offset to center original image in new canvas
-                $offsetX = ($diagonal - $originalWidth) / 2;
-                $offsetY = ($diagonal - $originalHeight) / 2;
+                // Create new canvas with calculated dimensions
+                $newCanvas = Image::canvas($newWidth, $newHeight, [255, 255, 255, 0]); // Transparent background
+                
+                // Calculate offset to center original image
+                $offsetX = ($newWidth - $originalWidth) / 2;
+                $offsetY = ($newHeight - $originalHeight) / 2;
                 
                 // Insert original image into center of new canvas
-                $newCanvas->insert($image, 'top-left', $offsetX, $offsetY);
+                $newCanvas->insert($image, 'top-left', (int)$offsetX, (int)$offsetY);
                 
                 // Rotate the canvas with the centered image
                 $newCanvas->rotate(-$rotation); // Negative because CSS rotation is clockwise
                 
                 // Update image reference
                 $image = $newCanvas;
-                
-                \Log::info("Applied rotation to image", [
+
+                \Illuminate\Support\Facades\Log::info("Applied rotation to image", [
                     'page' => $this->currentPage,
                     'rotation' => $rotation,
                     'original_dimensions' => [
@@ -106,10 +113,13 @@ class ProcessRegions implements ShouldQueue
             $ocrImageHeight = $image->height();
 
             foreach ($this->regions as $region) {
-                // ADDED: Scale coordinates from preview to OCR image dimensions
-                $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
+                // Get the current page rotation
+                $currentRotation = $this->pageRotations[$this->currentPage] ?? 0;
+                
+                // Scale coordinates from preview to OCR image dimensions, including rotation
+                $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight, $currentRotation);
 
-                // Crop the region from the image
+                // Crop the region from the image, adjusting for rotation
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
                 
                 // Save cropped image for debugging and permanent storage
@@ -159,13 +169,13 @@ class ProcessRegions implements ShouldQueue
                         throw new \Exception("Insufficient text detected with PSM 6");
                     }
                     
-                    \Log::info("OCR successful with PSM 6", [
+                    \Illuminate\Support\Facades\Log::info("OCR successful with PSM 6", [
                         'region_id' => $region['id'],
                         'text_length' => strlen($text)
                     ]);
                     
                 } catch (\Exception $e) {
-                    \Log::warning("OCR failed with PSM 6, trying PSM 4", [
+                    \Illuminate\Support\Facades\Log::warning("OCR failed with PSM 6, trying PSM 4", [
                         'region_id' => $region['id'],
                         'error' => $e->getMessage()
                     ]);
@@ -187,13 +197,13 @@ class ProcessRegions implements ShouldQueue
                             throw new \Exception("Insufficient text detected with PSM 4");
                         }
                         
-                        \Log::info("OCR successful with PSM 4 fallback", [
+                        \Illuminate\Support\Facades\Log::info("OCR successful with PSM 4 fallback", [
                             'region_id' => $region['id'],
                             'text_length' => strlen($text)
                         ]);
                         
                     } catch (\Exception $e2) {
-                        \Log::warning("OCR failed with PSM 4, trying PSM 11", [
+                        \Illuminate\Support\Facades\Log::warning("OCR failed with PSM 4, trying PSM 11", [
                             'region_id' => $region['id'],
                             'error' => $e2->getMessage()
                         ]);
@@ -211,13 +221,13 @@ class ProcessRegions implements ShouldQueue
                             $tsv = $tesseract->run();
                             $text = $this->parseTsvOutput($tsv);
                             
-                            \Log::info("OCR completed with PSM 11 fallback", [
+                            \Illuminate\Support\Facades\Log::info("OCR completed with PSM 11 fallback", [
                                 'region_id' => $region['id'],
                                 'text_length' => strlen($text)
                             ]);
                             
                         } catch (\Exception $e3) {
-                            \Log::error("All OCR configurations failed", [
+                            \Illuminate\Support\Facades\Log::error("All OCR configurations failed", [
                                 'region_id' => $region['id'],
                                 'errors' => [$e->getMessage(), $e2->getMessage(), $e3->getMessage()]
                             ]);
