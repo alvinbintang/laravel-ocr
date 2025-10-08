@@ -397,29 +397,26 @@
     <style>
         .image-container {
             position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            display: inline-block;
             border: 2px solid #e5e7eb;
             border-radius: 8px;
+            overflow: hidden;
             background-color: #f9fafb;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            width: 100%;
+            max-width: 100%;
+            /* UPDATED: Improved responsive image container */
+            width: fit-content;
             margin: 0 auto;
-            /* ADDED: Ensure enough space for rotated image */
-            min-height: 600px;
-            padding: 2rem;
-            overflow: visible; /* UPDATED: Allow image to overflow during rotation */
         }
 
         .preview-image {
             display: block;
-            max-width: 90%; /* UPDATED: Allow some margin for rotation */
-            max-height: 80vh;
+            max-width: 100%;
+            height: auto;
+            /* UPDATED: Improved image display */
+            min-height: 400px;
             object-fit: contain;
             background-color: white;
-            transform-origin: center center; /* ADDED: Ensure rotation happens from center */
-            transition: transform 0.3s ease; /* ADDED: Smooth rotation animation */
         }
 
         .loading-placeholder {
@@ -955,8 +952,8 @@
                     },
                     body: JSON.stringify({
                         regions: regionsData,
-                        previewDimensions: previewDimensions,
-                        pageRotations: window.pageRotations // UPDATED: Send all page rotations
+                        previewDimensions: previewDimensions, // ADDED: Include preview dimensions
+                        pageRotation: currentRotation // ADDED: Include current page rotation
                     })
                 })
                 .then(response => response.json())
@@ -1316,156 +1313,69 @@
             imageContainer.style.alignItems = 'center';
             imageContainer.style.justifyContent = 'center';
             
-            // Reset image to initial state
-            previewImage.style.position = 'relative';
-            previewImage.style.margin = '0';
-            // Calculate transform origin based on rotation
-            const calculateTransformOrigin = (angle) => {
-                // Normalize angle to 0-360
-                const normalizedAngle = ((angle % 360) + 360) % 360;
-                
-                // Get the current bounding box
-                const rect = previewImage.getBoundingClientRect();
-                const centerX = rect.width / 2;
-                const centerY = rect.height / 2;
-                
-                // Calculate offset based on rotation angle
-                let originX = 'center';
-                let originY = 'center';
-                
-                if (normalizedAngle > 45 && normalizedAngle <= 135) {
-                    originX = `${centerY}px`;
-                    originY = `${centerX}px`;
-                } else if (normalizedAngle > 135 && normalizedAngle <= 225) {
-                    originX = `${centerX}px`;
-                    originY = `${centerY}px`;
-                } else if (normalizedAngle > 225 && normalizedAngle <= 315) {
-                    originX = `${centerY}px`;
-                    originY = `${centerX}px`;
-                }
-                
-                return `${originX} ${originY}`;
-            };
+            // Reset gambar ke kondisi awal
+            previewImage.style.maxWidth = '';
+            previewImage.style.maxHeight = '';
+            previewImage.style.width = '';
+            previewImage.style.height = '';
+            previewImage.style.margin = 'auto';
+            previewImage.style.transformOrigin = 'center center';
             
-            previewImage.style.transformOrigin = calculateTransformOrigin(rotation);
-            previewImage.style.display = 'block';
-            
-            // Initialize container sizing
-            imageContainer.style.position = 'relative';
-            imageContainer.style.overflow = 'visible';
-            imageContainer.style.minHeight = '500px';
-            
-            // Calculate dimensions for rotated state
-            const isLandscape = rotation === 90 || rotation === 270;
-            const rotatedWidth = isLandscape ? originalHeight : originalWidth;
-            const rotatedHeight = isLandscape ? originalWidth : originalHeight;
-            
-            // Calculate available space with padding
-            const availableWidth = containerWidth * 0.95; // 95% of container width
-            const availableHeight = Math.max(containerHeight, 500) * 0.95; // 95% of container height
-            
-            // Enhanced scaling calculation
-            const calculateOptimalScale = () => {
-                // Base scaling factors
-                const scaleX = availableWidth / rotatedWidth;
-                const scaleY = availableHeight / rotatedHeight;
+            if (rotation === 90 || rotation === 270) {
+                // Untuk rotasi landscape (90° atau 270°)
                 
-                // Initial scale based on container fit
-                let scale = Math.min(scaleX, scaleY, 1);
+                // Hitung dimensi yang diperlukan setelah rotasi
+                const rotatedWidth = originalHeight;
+                const rotatedHeight = originalWidth;
                 
-                // Calculate diagonal for rotated state
-                const rotatedDiagonal = Math.sqrt(
-                    Math.pow(rotatedWidth * scale, 2) + 
-                    Math.pow(rotatedHeight * scale, 2)
-                );
+                // Hitung skala yang diperlukan agar gambar muat dalam container
+                const scaleX = containerWidth / rotatedWidth;
+                const scaleY = containerHeight / rotatedHeight;
+                const scale = Math.min(scaleX, scaleY, 0.9); // Maksimal 90% dari container
                 
-                // Adjust scale if diagonal exceeds container bounds
-                if (rotatedDiagonal > Math.min(availableWidth, availableHeight)) {
-                    const diagonalScale = Math.min(
-                        availableWidth / rotatedDiagonal,
-                        availableHeight / rotatedDiagonal
-                    );
-                    scale *= diagonalScale;
-                }
+                // Atur container untuk menampung gambar landscape
+                imageContainer.style.height = Math.max(containerHeight, rotatedHeight * scale + 50) + 'px';
+                imageContainer.style.minHeight = '500px';
                 
-                // Add small margin for safety
-                return scale * 0.98;
-            };
-            
-            const scale = calculateOptimalScale();
-            
-            // Calculate final dimensions
-            const finalWidth = originalWidth * scale;
-            const finalHeight = originalHeight * scale;
-            
-            // Apply styles to container
-            if (isLandscape) {
-                const containerMinHeight = Math.max(rotatedWidth * scale + 100, 500); // Add padding
-                imageContainer.style.height = containerMinHeight + 'px';
-                // Center container horizontally
-                imageContainer.style.display = 'flex';
-                imageContainer.style.justifyContent = 'center';
-                imageContainer.style.alignItems = 'center';
+                // Atur gambar dengan skala yang tepat
+                previewImage.style.width = (originalWidth * scale) + 'px';
+                previewImage.style.height = (originalHeight * scale) + 'px';
+                previewImage.style.maxWidth = 'none';
+                previewImage.style.maxHeight = 'none';
+                previewImage.style.transform = `rotate(${rotation}deg) scale(1)`;
+                previewImage.style.display = 'block';
+                
             } else {
+                // Untuk rotasi portrait (0° atau 180°)
+                
+                // Hitung skala yang diperlukan
+                const scaleX = containerWidth / originalWidth;
+                const scaleY = containerHeight / originalHeight;
+                const scale = Math.min(scaleX, scaleY, 1); // Maksimal ukuran asli
+                
                 imageContainer.style.height = 'auto';
-                imageContainer.style.display = 'flex';
-                imageContainer.style.justifyContent = 'center';
-                imageContainer.style.alignItems = 'flex-start';
-                imageContainer.style.padding = '20px 0';
-            }
-            
-            // Apply styles to image
-            previewImage.style.width = finalWidth + 'px';
-            previewImage.style.height = finalHeight + 'px';
-            previewImage.style.maxWidth = 'none';
-            previewImage.style.maxHeight = 'none';
-            
-            // Add smooth transition for rotation
-            previewImage.style.transition = 'transform 0.3s ease-in-out';
-            previewImage.style.transform = `rotate(${rotation}deg)`;
-            
-            // Listen for transition end to update regions
-            previewImage.addEventListener('transitionend', function(e) {
-                if (e.propertyName === 'transform') {
-                    // Update regions after transition completes
-                    if (typeof updateRegionsDisplay === 'function') {
-                        updateRegionsDisplay();
-                    }
+                imageContainer.style.minHeight = 'auto';
+                
+                // Atur gambar untuk portrait
+                if (scale < 1) {
+                    previewImage.style.width = (originalWidth * scale) + 'px';
+                    previewImage.style.height = (originalHeight * scale) + 'px';
+                } else {
+                    previewImage.style.maxWidth = '100%';
+                    previewImage.style.height = 'auto';
                 }
-            }, { once: true }); // Remove listener after first trigger
-            
-            // Add wrapper for better positioning if needed
-            const wrapper = previewImage.parentElement;
-            if (wrapper && wrapper !== imageContainer) {
-                wrapper.style.display = 'flex';
-                wrapper.style.justifyContent = 'center';
-                wrapper.style.alignItems = 'center';
-                wrapper.style.width = '100%';
-                wrapper.style.height = '100%';
+                
+                previewImage.style.transform = `rotate(${rotation}deg)`;
+                previewImage.style.display = 'block';
             }
             
             // Perbarui tampilan region jika ada
-            // Update regions with improved timing
-            const updateRegionsWithDelay = () => {
-                if (typeof updateRegionsDisplay === 'function') {
-                    // First immediate update for initial positioning
-                    updateRegionsDisplay();
-                    
-                    // Additional update after transition completes
-                    const transitionDuration = 300; // Match transition duration
-                    setTimeout(() => {
-                        updateRegionsDisplay();
-                        
-                        // Final update after a short delay to ensure stability
-                        setTimeout(updateRegionsDisplay, 100);
-                    }, transitionDuration);
-                }
-            };
-            
-            updateRegionsWithDelay();
+            if (typeof updateRegionsDisplay === 'function') {
+                setTimeout(updateRegionsDisplay, 150);
+            }
         }
         
-        // Function to save rotation to server
+        // Fungsi untuk menyimpan rotasi ke server
         function saveRotation() {
             fetch(`/ocr/{{ $ocrResult->id }}/save-rotations`, {
                 method: 'POST',
