@@ -183,10 +183,44 @@
                                 // Apply rotation to current page
                                 function applyCurrentPageRotation() {
                                     const previewImage = document.getElementById('preview-image');
-                                    if (!previewImage) return;
+                                    const imageContainer = document.getElementById('image-container');
+                                    if (!previewImage || !imageContainer) return;
                                     
                                     const rotation = pageRotations[currentPage] || 0;
-                                    previewImage.style.transform = `rotate(${rotation}deg)`;
+                                    
+                                    // UPDATED: First adjust container, then apply rotation
+                                    adjustContainerForRotation(rotation);
+                                    
+                                    // UPDATED: Enhanced rotation with proper fitting
+                                    if (rotation === 90 || rotation === 270) {
+                                        // For 90° and 270° rotations, we need to adjust the container and image
+                                        const naturalWidth = previewImage.naturalWidth;
+                                        const naturalHeight = previewImage.naturalHeight;
+                                        
+                                        if (naturalWidth && naturalHeight) {
+                                            // Calculate the scale factor to fit the rotated image
+                                            const containerWidth = imageContainer.clientWidth;
+                                            const aspectRatio = naturalHeight / naturalWidth; // Swapped for rotation
+                                            
+                                            // Set transform with proper scaling and rotation
+                                            previewImage.style.transform = `rotate(${rotation}deg) scale(${aspectRatio})`;
+                                            previewImage.style.transformOrigin = 'center center';
+                                            previewImage.style.maxWidth = 'none';
+                                            previewImage.style.width = `${containerWidth / aspectRatio}px`;
+                                            previewImage.style.height = 'auto';
+                                        } else {
+                                            // Fallback for when natural dimensions aren't available yet
+                                            previewImage.style.transform = `rotate(${rotation}deg)`;
+                                            previewImage.style.transformOrigin = 'center center';
+                                        }
+                                    } else {
+                                        // For 0° and 180° rotations, use standard fitting
+                                        previewImage.style.transform = `rotate(${rotation}deg)`;
+                                        previewImage.style.transformOrigin = 'center center';
+                                        previewImage.style.maxWidth = '100%';
+                                        previewImage.style.width = 'auto';
+                                        previewImage.style.height = 'auto';
+                                    }
                                     
                                     // Update RegionSelector's currentPage if it exists
                                     if (window.regionSelector && window.regionSelector.currentPage !== currentPage) {
@@ -217,8 +251,8 @@
                                     });
                                 }
                             </script>
-                            <div id="image-container" class="relative border border-gray-300 rounded overflow-hidden">
-                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto" style="display: none;">
+                            <div id="image-container" class="relative border border-gray-300 rounded overflow-hidden transition-all duration-300">
+                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto transition-transform duration-300" style="display: none;" onload="handleImageLoad()">
                                 <!-- UPDATED: Improved loading placeholder with spinner -->
                                 <div id="loading-placeholder" class="flex items-center justify-center bg-gray-100 h-96">
                                     <div class="text-center">
@@ -228,6 +262,45 @@
                                 </div>
                                 <div id="regions-overlay" class="absolute inset-0 pointer-events-none"></div>
                             </div>
+                            
+                            <script>
+                                // ADDED: Handle image load event to apply rotation after image is loaded
+                                function handleImageLoad() {
+                                    const previewImage = document.getElementById('preview-image');
+                                    if (previewImage) {
+                                        // Apply rotation after image is fully loaded
+                                        setTimeout(() => {
+                                            applyCurrentPageRotation();
+                                        }, 100);
+                                    }
+                                }
+                                
+                                // ADDED: Enhanced rotation function with container adjustment
+                                function adjustContainerForRotation(rotation) {
+                                    const previewImage = document.getElementById('preview-image');
+                                    const imageContainer = document.getElementById('image-container');
+                                    if (!previewImage || !imageContainer) return;
+                                    
+                                    const naturalWidth = previewImage.naturalWidth;
+                                    const naturalHeight = previewImage.naturalHeight;
+                                    
+                                    if (naturalWidth && naturalHeight) {
+                                        if (rotation === 90 || rotation === 270) {
+                                            // For 90° and 270° rotations, swap dimensions
+                                            const containerMaxWidth = imageContainer.parentElement.clientWidth;
+                                            const rotatedAspectRatio = naturalWidth / naturalHeight; // Original aspect ratio
+                                            const newHeight = containerMaxWidth * rotatedAspectRatio;
+                                            
+                                            imageContainer.style.height = `${newHeight}px`;
+                                            imageContainer.style.width = '100%';
+                                        } else {
+                                            // For 0° and 180° rotations, use original proportions
+                                            imageContainer.style.height = 'auto';
+                                            imageContainer.style.width = '100%';
+                                        }
+                                    }
+                                }
+                            </script>
                         </div>
 
                         <!-- Selected Regions List -->
