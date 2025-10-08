@@ -961,22 +961,27 @@
                 }
             }
 
-            // ADDED: Function to transform coordinates based on rotation
+            // UPDATED: Function to transform coordinates based on rotation
             transformCoordinatesForRotation(region, rotation, imageWidth, imageHeight) {
                 const x = region.x;
                 const y = region.y;
                 const width = region.width;
                 const height = region.height;
                 
-                switch (rotation) {
+                // Convert rotation to positive value (0, 90, 180, 270)
+                const normalizedRotation = ((rotation % 360) + 360) % 360;
+                
+                switch (normalizedRotation) {
                     case 90:
+                        // For 90° clockwise rotation: (x,y) -> (imageHeight-y-height, x)
                         return {
-                            x: y,
-                            y: imageWidth - x - width,
+                            x: imageHeight - y - height,
+                            y: x,
                             width: height,
                             height: width
                         };
                     case 180:
+                        // For 180° rotation: (x,y) -> (imageWidth-x-width, imageHeight-y-height)
                         return {
                             x: imageWidth - x - width,
                             y: imageHeight - y - height,
@@ -984,9 +989,10 @@
                             height: height
                         };
                     case 270:
+                        // For 270° clockwise rotation: (x,y) -> (y, imageWidth-x-width)
                         return {
-                            x: imageHeight - y - height,
-                            y: x,
+                            x: y,
+                            y: imageWidth - x - width,
                             width: height,
                             height: width
                         };
@@ -1023,20 +1029,14 @@
 
                 // UPDATED: Transform coordinates based on rotation before sending to server
                 const regionsData = this.regions.map(region => {
-                    // First transform coordinates for rotation
-                    const transformedRegion = this.transformCoordinatesForRotation(
-                        region, 
-                        currentRotation, 
-                        previewDimensions.width, 
-                        previewDimensions.height
-                    );
-                    
+                    // UPDATED: Don't transform coordinates here - let the server handle it
+                    // The coordinates should remain as they are selected on the rotated preview
                     return {
                         id: region.id,
-                        x: Math.round(transformedRegion.x),
-                        y: Math.round(transformedRegion.y),
-                        width: Math.round(transformedRegion.width),
-                        height: Math.round(transformedRegion.height),
+                        x: Math.round(region.x),
+                        y: Math.round(region.y),
+                        width: Math.round(region.width),
+                        height: Math.round(region.height),
                         page: region.page
                     };
                 });

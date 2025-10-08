@@ -284,7 +284,7 @@ class ProcessRegions implements ShouldQueue
         return null;
     }
 
-    // ADDED: Helper method to scale coordinates from preview to OCR image dimensions
+    // UPDATED: Helper method to scale coordinates from preview to OCR image dimensions
     private function scaleCoordinates(array $region, int $ocrImageWidth, int $ocrImageHeight): array
     {
         // If no preview dimensions provided, return original coordinates (fallback)
@@ -295,11 +295,15 @@ class ProcessRegions implements ShouldQueue
         $previewWidth = $this->previewDimensions['width'];
         $previewHeight = $this->previewDimensions['height'];
 
+        // UPDATED: For rotated images, the coordinates are already positioned correctly on the rotated preview
+        // We just need to scale them to match the OCR image dimensions (which is also rotated)
+        
         // Calculate scaling factors
         $scaleX = $ocrImageWidth / $previewWidth;
         $scaleY = $ocrImageHeight / $previewHeight;
 
-        // Apply scaling to coordinates
+        // Apply scaling to coordinates - no rotation transformation needed here
+        // because the image is already rotated and coordinates are relative to the rotated view
         return [
             'id' => $region['id'],
             'x' => (int) round($region['x'] * $scaleX),
