@@ -183,10 +183,27 @@
                                 // Apply rotation to current page
                                 function applyCurrentPageRotation() {
                                     const previewImage = document.getElementById('preview-image');
-                                    if (!previewImage) return;
+                                    const imageContainer = document.getElementById('image-container');
+                                    if (!previewImage || !imageContainer) return;
                                     
                                     const rotation = pageRotations[currentPage] || 0;
+                                    
+                                    // Apply rotation with proper transform origin
                                     previewImage.style.transform = `rotate(${rotation}deg)`;
+                                    
+                                    // Adjust container size to accommodate rotated image
+                                    if (rotation === 90 || rotation === 270) {
+                                        // For 90° and 270° rotations, we need more height
+                                        const imageWidth = previewImage.naturalWidth || previewImage.offsetWidth;
+                                        const imageHeight = previewImage.naturalHeight || previewImage.offsetHeight;
+                                        
+                                        // Calculate the diagonal space needed
+                                        const maxDimension = Math.max(imageWidth, imageHeight);
+                                        imageContainer.style.minHeight = `${maxDimension + 100}px`;
+                                    } else {
+                                        // For 0° and 180° rotations, use default height
+                                        imageContainer.style.minHeight = '400px';
+                                    }
                                     
                                     // Update RegionSelector's currentPage if it exists
                                     if (window.regionSelector && window.regionSelector.currentPage !== currentPage) {
@@ -217,8 +234,8 @@
                                     });
                                 }
                             </script>
-                            <div id="image-container" class="relative border border-gray-300 rounded overflow-hidden">
-                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto" style="display: none;">
+                            <div id="image-container" class="relative border border-gray-300 rounded flex items-center justify-center" style="min-height: 400px; overflow: visible;">
+                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto transition-transform duration-300" style="display: none; transform-origin: center center;">
                                 <!-- UPDATED: Improved loading placeholder with spinner -->
                                 <div id="loading-placeholder" class="flex items-center justify-center bg-gray-100 h-96">
                                     <div class="text-center">

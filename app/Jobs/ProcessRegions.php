@@ -73,9 +73,58 @@ class ProcessRegions implements ShouldQueue
             $ocrImageWidth = $image->width();
             $ocrImageHeight = $image->height();
 
+            // ADDED: Resolution detection and mismatch warnings
+            if (isset($this->previewDimensions['width']) && isset($this->previewDimensions['height'])) {
+                $previewWidth = $this->previewDimensions['width'];
+                $previewHeight = $this->previewDimensions['height'];
+                
+                $scaleX = $ocrImageWidth / $previewWidth;
+                $scaleY = $ocrImageHeight / $previewHeight;
+                
+                // Check for significant mismatch (>10%)
+                $scaleDifference = abs($scaleX - $scaleY) / max($scaleX, $scaleY);
+                
+                if ($scaleDifference > 0.1) {
+                    \Log::warning("Coordinate mismatch — scaling factor may be inaccurate", [
+                        'preview_dimensions' => ['width' => $previewWidth, 'height' => $previewHeight],
+                        'ocr_image_dimensions' => ['width' => $ocrImageWidth, 'height' => $ocrImageHeight],
+                        'scale_x' => round($scaleX, 3),
+                        'scale_y' => round($scaleY, 3),
+                        'scale_difference_percent' => round($scaleDifference * 100, 2),
+                        'page' => $this->currentPage,
+                        'rotation' => $rotation
+                    ]);
+                }
+                
+                \Log::info("Resolution detection completed", [
+                    'preview_dimensions' => ['width' => $previewWidth, 'height' => $previewHeight],
+                    'ocr_image_dimensions' => ['width' => $ocrImageWidth, 'height' => $ocrImageHeight],
+                    'scale_factors' => ['x' => round($scaleX, 3), 'y' => round($scaleY, 3)],
+                    'aspect_ratio_match' => $scaleDifference <= 0.1 ? 'good' : 'poor'
+                ]);
+            } else {
+                \Log::warning("Preview dimensions not available for resolution detection", [
+                    'ocr_image_dimensions' => ['width' => $ocrImageWidth, 'height' => $ocrImageHeight],
+                    'page' => $this->currentPage
+                ]);
+            }
+
             foreach ($this->regions as $region) {
                 // ADDED: Scale coordinates from preview to OCR image dimensions
                 $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
+
+                // ADDED: Apply coordinate rotation if image was rotated
+                if ($rotation > 0) {
+                    $scaledRegion = $this->rotateCoordinates($scaledRegion, $ocrImageWidth, $ocrImageHeight, $rotation);
+                }
+
+                \Log::info("Final coordinates for cropping", [
+                    'original_region' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $region['x'], $region['y'], $region['width'], $region['height']),
+                    'scaled_region' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $scaledRegion['x'], $scaledRegion['y'], $scaledRegion['width'], $scaledRegion['height']),
+                    'rotation_applied' => $rotation,
+                    'region_id' => $region['id'],
+                    'page' => $this->currentPage
+                ]);
 
                 // Crop the region from the image
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
@@ -93,6 +142,13 @@ class ProcessRegions implements ShouldQueue
                 
                 // Save cropped image
                 $croppedImage->save($croppedImageFullPath);
+                
+                \Log::info("Cropped image saved", [
+                    'path' => "storage/app/public/{$croppedImagePath}",
+                    'region_id' => $region['id'],
+                    'page' => $this->currentPage,
+                    'dimensions' => ['width' => $scaledRegion['width'], 'height' => $scaledRegion['height']]
+                ]);
                 
                 // Store cropped image info
                 $croppedImages[] = [
@@ -274,11 +330,15 @@ class ProcessRegions implements ShouldQueue
         return null;
     }
 
-    // ADDED: Helper method to scale coordinates from preview to OCR image dimensions
+    // UPDATED: Helper method to scale coordinates from preview to OCR image dimensions
     private function scaleCoordinates(array $region, int $ocrImageWidth, int $ocrImageHeight): array
     {
         // If no preview dimensions provided, return original coordinates (fallback)
         if (!$this->previewDimensions || !isset($this->previewDimensions['width']) || !isset($this->previewDimensions['height'])) {
+            \Log::warning("No preview dimensions provided, using original coordinates", [
+                'region_id' => $region['id'] ?? 'unknown',
+                'ocr_result_id' => $this->ocrResultId
+            ]);
             return $region;
         }
 
@@ -289,8 +349,21 @@ class ProcessRegions implements ShouldQueue
         $scaleX = $ocrImageWidth / $previewWidth;
         $scaleY = $ocrImageHeight / $previewHeight;
 
+        // ADDED: Check for significant scaling factor mismatch (>10% difference)
+        $scaleDifference = abs($scaleX - $scaleY) / max($scaleX, $scaleY);
+        if ($scaleDifference > 0.1) {
+            \Log::warning("Coordinate mismatch — scaling factor may be inaccurate", [
+                'scale_x' => $scaleX,
+                'scale_y' => $scaleY,
+                'difference_percent' => round($scaleDifference * 100, 2),
+                'preview_dimensions' => $this->previewDimensions,
+                'ocr_dimensions' => ['width' => $ocrImageWidth, 'height' => $ocrImageHeight],
+                'region_id' => $region['id'] ?? 'unknown'
+            ]);
+        }
+
         // Apply scaling to coordinates
-        return [
+        $scaledRegion = [
             'id' => $region['id'],
             'x' => (int) round($region['x'] * $scaleX),
             'y' => (int) round($region['y'] * $scaleY),
@@ -298,6 +371,77 @@ class ProcessRegions implements ShouldQueue
             'height' => (int) round($region['height'] * $scaleY),
             'page' => $region['page'] ?? $this->currentPage
         ];
+
+        \Log::info("Scaling region from preview -> OCR image", [
+            'original' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $region['x'], $region['y'], $region['width'], $region['height']),
+            'scaled' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $scaledRegion['x'], $scaledRegion['y'], $scaledRegion['width'], $scaledRegion['height']),
+            'scale_factors' => ['x' => $scaleX, 'y' => $scaleY],
+            'region_id' => $region['id'] ?? 'unknown'
+        ]);
+
+        return $scaledRegion;
+    }
+
+    // ADDED: Helper method to rotate coordinates based on image rotation
+    private function rotateCoordinates(array $region, int $imageWidth, int $imageHeight, int $rotation): array
+    {
+        // Normalize rotation to 0-359 degrees
+        $rotation = $rotation % 360;
+        if ($rotation < 0) $rotation += 360;
+
+        // If no rotation, return original coordinates
+        if ($rotation === 0) {
+            return $region;
+        }
+
+        $x = $region['x'];
+        $y = $region['y'];
+        $width = $region['width'];
+        $height = $region['height'];
+
+        $rotatedRegion = $region; // Start with original region
+
+        switch ($rotation) {
+            case 90:
+                // 90° clockwise rotation: (x,y) -> (y, imageWidth - x - width)
+                $rotatedRegion['x'] = $y;
+                $rotatedRegion['y'] = $imageWidth - $x - $width;
+                $rotatedRegion['width'] = $height;
+                $rotatedRegion['height'] = $width;
+                break;
+
+            case 180:
+                // 180° rotation: (x,y) -> (imageWidth - x - width, imageHeight - y - height)
+                $rotatedRegion['x'] = $imageWidth - $x - $width;
+                $rotatedRegion['y'] = $imageHeight - $y - $height;
+                // Width and height remain the same
+                break;
+
+            case 270:
+                // 270° clockwise rotation: (x,y) -> (imageHeight - y - height, x)
+                $rotatedRegion['x'] = $imageHeight - $y - $height;
+                $rotatedRegion['y'] = $x;
+                $rotatedRegion['width'] = $height;
+                $rotatedRegion['height'] = $width;
+                break;
+
+            default:
+                \Log::warning("Unsupported rotation angle", [
+                    'rotation' => $rotation,
+                    'region_id' => $region['id'] ?? 'unknown'
+                ]);
+                return $region; // Return original if unsupported rotation
+        }
+
+        \Log::info("Applying rotation {$rotation}° -> adjusted coordinates", [
+            'original' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $x, $y, $width, $height),
+            'rotated' => sprintf("(x=%d, y=%d, w=%d, h=%d)", $rotatedRegion['x'], $rotatedRegion['y'], $rotatedRegion['width'], $rotatedRegion['height']),
+            'rotation' => $rotation,
+            'image_dimensions' => ['width' => $imageWidth, 'height' => $imageHeight],
+            'region_id' => $region['id'] ?? 'unknown'
+        ]);
+
+        return $rotatedRegion;
     }
 
     // UPDATED: Improved method to parse TSV output from Tesseract with line-based grouping for table structure
