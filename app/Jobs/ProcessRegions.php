@@ -18,15 +18,17 @@ class ProcessRegions implements ShouldQueue
 
     protected $ocrResultId;
     protected $regions;
-    protected $currentPage; // ADDED: Track current page
-    protected $previewDimensions; // ADDED: Store preview dimensions for scaling
+    protected $currentPage;
+    protected $previewDimensions;
+    protected $pageRotations; // ADDED: Store page rotations for scaling
 
-    public function __construct($ocrResultId, array $regions, int $currentPage = 1, array $previewDimensions = null)
+    public function __construct($ocrResultId, array $regions, int $currentPage = 1, array $previewDimensions = null, array $pageRotations = [])
     {
         $this->ocrResultId = $ocrResultId;
         $this->regions = $regions;
-        $this->currentPage = $currentPage; // ADDED: Store current page
-        $this->previewDimensions = $previewDimensions; // ADDED: Store preview dimensions
+        $this->currentPage = $currentPage;
+        $this->previewDimensions = $previewDimensions;
+        $this->pageRotations = $pageRotations; // ADDED: Store page rotations
     }
 
     public function handle(): void
@@ -39,7 +41,8 @@ class ProcessRegions implements ShouldQueue
                 'ocr_result_id' => $this->ocrResultId,
                 'current_page' => $this->currentPage,
                 'preview_dimensions' => $this->previewDimensions,
-                'regions_count' => count($this->regions)
+                'regions_count' => count($this->regions),
+                'page_rotations' => $this->pageRotations // ADDED: Log rotations
             ]);
 
             // Get the image path for the specific page
@@ -54,22 +57,51 @@ class ProcessRegions implements ShouldQueue
             $results = [];
             $croppedImages = [];
 
+            // Load original image
             $image = Image::read($imagePath);
             
-            // ADDED: Apply rotation if exists for current page
-            $pageRotations = $ocrResult->page_rotations ?? [];
-            $rotation = $pageRotations[$this->currentPage] ?? 0;
+            // UPDATED: Get original dimensions before rotation
+            $originalWidth = $image->width();
+            $originalHeight = $image->height();
+            
+            // Get rotation for current page and apply if needed
+            $rotation = $this->pageRotations[$this->currentPage] ?? 0;
             
             if ($rotation > 0) {
-                $image->rotate(-$rotation); // Negative because CSS rotation is clockwise, image rotation is counter-clockwise
+                // Calculate size of new canvas needed to fit rotated image
+                $diagonal = ceil(sqrt(pow($originalWidth, 2) + pow($originalHeight, 2)));
+                
+                // Create new square canvas large enough to hold rotated image
+                $newCanvas = Image::canvas($diagonal, $diagonal);
+                
+                // Calculate offset to center original image in new canvas
+                $offsetX = ($diagonal - $originalWidth) / 2;
+                $offsetY = ($diagonal - $originalHeight) / 2;
+                
+                // Insert original image into center of new canvas
+                $newCanvas->insert($image, 'top-left', $offsetX, $offsetY);
+                
+                // Rotate the canvas with the centered image
+                $newCanvas->rotate(-$rotation); // Negative because CSS rotation is clockwise
+                
+                // Update image reference
+                $image = $newCanvas;
+                
                 \Log::info("Applied rotation to image", [
                     'page' => $this->currentPage,
                     'rotation' => $rotation,
-                    'ocr_result_id' => $this->ocrResultId
+                    'original_dimensions' => [
+                        'width' => $originalWidth,
+                        'height' => $originalHeight
+                    ],
+                    'new_dimensions' => [
+                        'width' => $diagonal,
+                        'height' => $diagonal
+                    ]
                 ]);
             }
 
-            // ADDED: Get actual OCR image dimensions for coordinate scaling
+            // Get final image dimensions for coordinate scaling
             $ocrImageWidth = $image->width();
             $ocrImageHeight = $image->height();
 
@@ -120,8 +152,7 @@ class ProcessRegions implements ShouldQueue
                     // Run OCR
                     $tsv = $tesseract->run();
                     
-                    // ADDED: Parse TSV output to maintain table structure
-                    $text = $this->parseTsvOutput($tsv);
+                        $text = $this->parseTsvOutput($tsv);
                     
                     // Check if we got reasonable results (minimum text length)
                     if (strlen(trim($text)) < 3) {
@@ -140,7 +171,7 @@ class ProcessRegions implements ShouldQueue
                     ]);
                     
                     try {
-                        // ADDED: Fallback 1: PSM 4 (single column of text of variable sizes)
+                                                // Fallback 1: PSM 4 (single column of text)
                         $tesseract = new TesseractOCR($tempPath);
                         $tesseract->lang('ind+eng')
                             ->psm(4)
@@ -196,22 +227,23 @@ class ProcessRegions implements ShouldQueue
                     }
                 }
 
-                // UPDATED: Add page information to results with scaled coordinates
+                // Add results with both scaled and original coordinates
                 $results[] = [
                     'region_id' => $region['id'],
-                    'page' => $this->currentPage, // ADDED: Page information
+                    'page' => $this->currentPage,
                     'coordinates' => [
-                        'x' => $scaledRegion['x'], // UPDATED: Use scaled coordinates
-                        'y' => $scaledRegion['y'], // UPDATED: Use scaled coordinates
-                        'width' => $scaledRegion['width'], // UPDATED: Use scaled coordinates
-                        'height' => $scaledRegion['height'] // UPDATED: Use scaled coordinates
+                        'x' => $scaledRegion['x'],
+                        'y' => $scaledRegion['y'],
+                        'width' => $scaledRegion['width'],
+                        'height' => $scaledRegion['height']
                     ],
-                    'original_coordinates' => [ // ADDED: Keep original preview coordinates for reference
+                    'original_coordinates' => [
                         'x' => $region['x'],
                         'y' => $region['y'],
                         'width' => $region['width'],
                         'height' => $region['height']
                     ],
+                    'rotation' => $rotation, // ADDED: Include rotation information
                     'text' => trim($text)
                 ];
 
@@ -274,8 +306,7 @@ class ProcessRegions implements ShouldQueue
         return null;
     }
 
-    // ADDED: Helper method to scale coordinates from preview to OCR image dimensions
-    private function scaleCoordinates(array $region, int $ocrImageWidth, int $ocrImageHeight): array
+    private function scaleCoordinates(array $region, int $ocrImageWidth, int $ocrImageHeight, int $rotation): array
     {
         // If no preview dimensions provided, return original coordinates (fallback)
         if (!$this->previewDimensions || !isset($this->previewDimensions['width']) || !isset($this->previewDimensions['height'])) {
@@ -285,18 +316,49 @@ class ProcessRegions implements ShouldQueue
         $previewWidth = $this->previewDimensions['width'];
         $previewHeight = $this->previewDimensions['height'];
 
-        // Calculate scaling factors
+        // Scale coordinates
         $scaleX = $ocrImageWidth / $previewWidth;
         $scaleY = $ocrImageHeight / $previewHeight;
+        
+        $x = $region['x'] * $scaleX;
+        $y = $region['y'] * $scaleY;
+        $width = $region['width'] * $scaleX;
+        $height = $region['height'] * $scaleY;
+        
+        if ($rotation > 0) {
+            // Calculate center point of the image
+            $centerX = $ocrImageWidth / 2;
+            $centerY = $ocrImageHeight / 2;
+            
+            // Convert rotation to radians
+            $radians = deg2rad($rotation);
+            
+            // Translate point to origin (center of image)
+            $translatedX = $x - $centerX;
+            $translatedY = $y - $centerY;
+            
+            // Apply rotation transformation
+            $newX = $translatedX * cos($radians) - $translatedY * sin($radians);
+            $newY = $translatedX * sin($radians) + $translatedY * cos($radians);
+            
+            // Translate back
+            $x = $newX + $centerX;
+            $y = $newY + $centerY;
+            
+            // For 90° or 270° rotations, swap width and height
+            if ($rotation == 90 || $rotation == 270) {
+                list($width, $height) = [$height, $width];
+            }
+        }
 
-        // Apply scaling to coordinates
         return [
             'id' => $region['id'],
-            'x' => (int) round($region['x'] * $scaleX),
-            'y' => (int) round($region['y'] * $scaleY),
-            'width' => (int) round($region['width'] * $scaleX),
-            'height' => (int) round($region['height'] * $scaleY),
-            'page' => $region['page'] ?? $this->currentPage
+            'x' => (int) round($x),
+            'y' => (int) round($y),
+            'width' => (int) round($width),
+            'height' => (int) round($height),
+            'page' => $region['page'] ?? $this->currentPage,
+            'rotation' => $rotation // ADDED: Include rotation for reference
         ];
     }
 
