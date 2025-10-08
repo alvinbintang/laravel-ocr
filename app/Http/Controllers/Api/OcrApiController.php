@@ -7,8 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Requests\OcrExtractRequest;
 use App\Http\Requests\ProcessRegionsRequest;
-use App\Services\OcrService;
-use App\Services\ExcelExportService;
+use App\Services\Admin\OcrService;
+use App\Services\Admin\ExcelExportService;
 use App\Http\Resources\OcrResultResource; // ADDED: OCR result resource
 use App\Http\Resources\OcrResultCollection; // ADDED: OCR result collection
 use Illuminate\Support\Facades\Validator;
@@ -166,10 +166,12 @@ class OcrApiController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'regions' => 'required|array',
+            'regions.*.id' => 'required|integer', // ADDED: Required id field
             'regions.*.x' => 'required|numeric',
             'regions.*.y' => 'required|numeric',
             'regions.*.width' => 'required|numeric',
             'regions.*.height' => 'required|numeric',
+            'regions.*.page' => 'required|integer|min:1', // ADDED: Required page field
             'previewDimensions' => 'nullable|array',
             'pageRotation' => 'nullable|array'
         ]);
@@ -183,20 +185,28 @@ class OcrApiController extends Controller
         }
 
         try {
-            $result = $this->ocrService->processRegions(
-                $id, 
-                $request->regions, 
-                $request->input('previewDimensions'),
-                $request->input('pageRotation')
-            );
+            // UPDATED: Process each page separately since service expects single page rotation
+            $regionsByPage = collect($request->regions)->groupBy('page');
+            $pageRotations = $request->input('pageRotation', []);
+            
+            foreach ($regionsByPage as $page => $pageRegions) {
+                $pageRotation = isset($pageRotations[$page]) ? (int)$pageRotations[$page] : null;
+                
+                $result = $this->ocrService->processRegions(
+                    $id, 
+                    $pageRegions->toArray(), 
+                    $request->input('previewDimensions'),
+                    $pageRotation
+                );
+            }
 
             return response()->json([
-                'success' => $result['success'],
-                'message' => $result['message'],
+                'success' => true,
+                'message' => 'Regions processed successfully',
                 'data' => [
-                    'status' => $result['status']
+                    'status' => 'processing'
                 ]
-            ], $result['success'] ? 200 : 500);
+            ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,

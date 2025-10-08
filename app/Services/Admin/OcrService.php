@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Admin;
 
 use App\Jobs\ProcessOcr;
 use App\Jobs\ProcessRegions;
@@ -36,7 +36,7 @@ class OcrService
      * @return array
      * @throws \Exception
      */
-    public function processPdfUpload(UploadedFile $pdfFile, string $documentType = 'RAB'): array
+    public function processPdfUpload(UploadedFile $pdfFile, ?string $documentType = 'RAB'): array // UPDATED: Made documentType nullable with default value
     {
         // Log upload information
         Log::info('PDF Upload Details', [
@@ -59,7 +59,7 @@ class OcrService
         // Simpan informasi ke database
         $ocrResult = $this->ocrResultRepository->create([
             'filename' => basename($path),
-            'document_type' => $documentType,
+            'document_type' => $documentType ?? 'RAB', // UPDATED: Ensure document_type is never null
             'status' => 'pending',
             'page_rotations' => json_encode([]),
         ]);
@@ -113,7 +113,8 @@ class OcrService
 
         return [
             'can_preview' => true,
-            'ocr_result' => $ocrResult
+            'ocr_result' => $ocrResult,
+            'message' => 'Preview data retrieved successfully' // ADDED: Missing message key
         ];
     }
 

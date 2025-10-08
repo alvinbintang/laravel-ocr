@@ -1,11 +1,12 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Http\Requests\OcrExtractRequest;
 use App\Http\Requests\ProcessRegionsRequest;
-use App\Services\OcrService;
+use App\Services\Admin\OcrService;
 
 class OcrController extends Controller
 {

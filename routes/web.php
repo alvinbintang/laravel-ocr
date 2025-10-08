@@ -1,8 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\OcrController;
-use App\Http\Controllers\ExcelExportController;
+use App\Http\Controllers\Admin\OcrController;
+use App\Http\Controllers\Admin\ExcelExportController;
 
 Route::get('/ocr', [OcrController::class, 'index'])->name('ocr.index');
 Route::post('/ocr/extract', [OcrController::class, 'extract'])->name('ocr.extract');
