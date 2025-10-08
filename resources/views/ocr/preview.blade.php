@@ -670,7 +670,7 @@
 
             startDrawing() {
                 this.imageContainer.classList.add('drawing-mode');
-                this.addRegionBtn.textContent = 'Click & Draw to Select';
+                this.addRegionBtn.textContent = 'Click & Drag to Select';
                 this.addRegionBtn.disabled = true;
             }
 
@@ -758,8 +758,6 @@
             }
 
             addRegion(drawingData) {
-                console.log('addRegion called with:', drawingData); // ADDED: Debug log
-                
                 const left = Math.min(drawingData.startX, drawingData.currentX);
                 const top = Math.min(drawingData.startY, drawingData.currentY);
                 const width = Math.abs(drawingData.currentX - drawingData.startX);
@@ -774,10 +772,7 @@
                     page: drawingData.page
                 };
 
-                console.log('Adding region:', region); // ADDED: Debug log
                 this.regions.push(region);
-                console.log('Total regions after add:', this.regions.length); // ADDED: Debug log
-                
                 this.updateRegionsDisplay();
                 this.updateRegionsList();
                 this.updateProcessButton();
@@ -876,12 +871,8 @@
             }
 
             updateRegionsList() {
-                console.log('updateRegionsList called, regions count:', this.regions.length); // ADDED: Debug log
-                console.log('regionsList element:', this.regionsList); // ADDED: Debug log
-                
                 if (this.regions.length === 0) {
                     this.regionsList.innerHTML = '<p class="text-gray-500 text-sm" id="no-regions-message">No regions selected. Click "Add Region" and draw on the image to select areas for OCR.</p>';
-                    console.log('Set empty regions message');
                     return;
                 }
 
@@ -893,36 +884,18 @@
                     groupedRegions[region.page].push(region);
                 });
 
-                console.log('Grouped regions:', groupedRegions); // ADDED: Debug log
-
                 let html = '';
                 let globalRegionCounter = 1; // ADDED: Global counter for consistent numbering
                 
                 Object.keys(groupedRegions).sort((a, b) => parseInt(a) - parseInt(b)).forEach(page => {
                     html += `<div class="mb-3">
                         <h4 class="font-medium text-sm text-gray-700 mb-2">Page ${page} (${groupedRegions[page].length} regions)</h4>
-                        <div class="space-y-2">`;
+                        <div class="space-y-1">`;
                     
                     groupedRegions[page].forEach((region, index) => {
-                        // UPDATED: Enhanced HTML structure with preview image placeholder
-                        html += `<div class="text-sm text-gray-600 bg-gray-50 p-3 rounded flex items-center space-x-3 border border-gray-200">
-                            <div class="flex-shrink-0">
-                                <div id="region-preview-${region.id}" class="w-16 h-16 bg-gray-200 rounded border border-gray-300 flex items-center justify-center">
-                                    <div class="animate-pulse text-xs text-gray-400">Loading...</div>
-                                </div>
-                            </div>
-                            <div class="flex-grow">
-                                <div class="font-medium text-gray-800">Region ${globalRegionCounter}</div>
-                                <div class="text-xs text-gray-500">
-                                    Size: ${Math.round(region.width)}×${Math.round(region.height)}px<br>
-                                    Position: (${Math.round(region.x)}, ${Math.round(region.y)})
-                                </div>
-                            </div>
-                            <div class="flex-shrink-0">
-                                <button onclick="regionManager.deleteRegion(${region.id})" class="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition-colors">
-                                    Delete
-                                </button>
-                            </div>
+                        html += `<div class="text-sm text-gray-600 bg-gray-50 p-2 rounded flex justify-between items-center">
+                            <span>Region ${globalRegionCounter}: ${Math.round(region.width)}×${Math.round(region.height)}px at (${Math.round(region.x)}, ${Math.round(region.y)})</span>
+                            <button onclick="regionManager.deleteRegion(${region.id})" class="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded">Delete</button>
                         </div>`;
                         globalRegionCounter++; // UPDATED: Increment global counter
                     });
@@ -930,73 +903,7 @@
                     html += '</div></div>';
                 });
 
-                console.log('Setting regionsList innerHTML with:', html);
                 this.regionsList.innerHTML = html;
-                console.log('regionsList updated successfully');
-                
-                // ADDED: Generate preview images for all regions after HTML is set
-                this.generateAllRegionPreviews();
-            }
-
-            // ADDED: Generate preview images for all regions
-            generateAllRegionPreviews() {
-                this.regions.forEach(async (region) => {
-                    const previewContainer = document.getElementById(`region-preview-${region.id}`);
-                    if (previewContainer) {
-                        try {
-                            const previewDataUrl = await this.generateRegionPreview(region);
-                            if (previewDataUrl) {
-                                previewContainer.innerHTML = `<img src="${previewDataUrl}" class="w-full h-full object-cover rounded" alt="Region preview">`;
-                            } else {
-                                previewContainer.innerHTML = '<div class="text-xs text-red-400">Failed</div>';
-                            }
-                        } catch (error) {
-                            console.error('Error generating preview for region', region.id, error);
-                            previewContainer.innerHTML = '<div class="text-xs text-red-400">Error</div>';
-                        }
-                    }
-                });
-            }
-
-            // ADDED: Generate preview image for a region using canvas
-            generateRegionPreview(region) {
-                return new Promise((resolve) => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    
-                    // Set canvas size to region size (with max dimensions for performance)
-                    const maxSize = 150; // Maximum preview size
-                    const aspectRatio = region.width / region.height;
-                    
-                    if (region.width > region.height) {
-                        canvas.width = Math.min(maxSize, region.width);
-                        canvas.height = canvas.width / aspectRatio;
-                    } else {
-                        canvas.height = Math.min(maxSize, region.height);
-                        canvas.width = canvas.height * aspectRatio;
-                    }
-                    
-                    // Get the current preview image
-                    const previewImage = this.previewImage;
-                    if (!previewImage || !previewImage.complete) {
-                        resolve(''); // Return empty if image not loaded
-                        return;
-                    }
-                    
-                    // Calculate scale factors
-                    const scaleX = canvas.width / region.width;
-                    const scaleY = canvas.height / region.height;
-                    
-                    // Draw the cropped region onto canvas
-                    ctx.drawImage(
-                        previewImage,
-                        region.x, region.y, region.width, region.height, // Source rectangle
-                        0, 0, canvas.width, canvas.height // Destination rectangle
-                    );
-                    
-                    // Convert canvas to data URL
-                    resolve(canvas.toDataURL('image/jpeg', 0.8));
-                });
             }
 
             updateProcessButton() {
@@ -1391,9 +1298,6 @@
         
         // Fungsi untuk menerapkan rotasi ke gambar
         function applyRotation() {
-            const previewImage = document.getElementById('preview-image');
-            if (!previewImage) return;
-            
             const rotation = pageRotations[currentPage] || 0;
             const imageContainer = document.getElementById('image-container');
             
@@ -1492,30 +1396,20 @@
             });
         }
         
-        // Override RegionManager's loadCurrentPage to apply rotation
-        if (window.regionManager) {
-            const originalLoadCurrentPage = window.regionManager.loadCurrentPage.bind(window.regionManager);
-            window.regionManager.loadCurrentPage = function() {
-                originalLoadCurrentPage();
-                // Apply rotation after image is loaded
-                const previewImage = document.getElementById('preview-image');
-                const loadingPlaceholder = document.getElementById('loading-placeholder');
-                if (previewImage) {
-                    previewImage.onload = function() {
-                        if (loadingPlaceholder) loadingPlaceholder.style.display = 'none';
-                        previewImage.style.display = 'block';
-                        applyRotation();
-                        if (window.regionManager) {
-                            window.regionManager.updateRegionsDisplay();
-                        }
-                    };
-                }
+        // Modifikasi fungsi loadCurrentPage untuk menerapkan rotasi
+        const originalLoadCurrentPage = loadCurrentPage;
+        loadCurrentPage = function() {
+            originalLoadCurrentPage.call(this);
+            // Terapkan rotasi setelah gambar dimuat
+            previewImage.onload = function() {
+                loadingPlaceholder.style.display = 'none';
+                previewImage.style.display = 'block';
+                applyRotation();
+                updateRegionsDisplay();
             };
-        }
+        };
         
         // Update process button state based on total regions
-        if (window.regionManager && window.regionManager.updateProcessButton) {
-            window.regionManager.updateProcessButton();
-        }
+        this.updateProcessButton();
     });
 </script>
