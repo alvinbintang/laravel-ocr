@@ -27,7 +27,7 @@
         </nav>
 
         <main class="py-10">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="w-full px-4 sm:px-6 lg:px-8">
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6 bg-white border-b border-gray-200">
                         <div class="flex justify-between items-center mb-6">
@@ -105,7 +105,7 @@
                         @endif
 
                         <!-- Image Preview Container -->
-                        <div class="relative mb-6" id="image-preview-container">
+                        <div class="relative mb-6 bg-gray-300 min-h-96 flex items-center justify-center" id="image-preview-container">
                             <!-- Rotation Controls -->
                             <div class="flex justify-end mb-4 pr-4">
                                 <div class="flex space-x-2">
@@ -184,41 +184,87 @@
                                 function applyCurrentPageRotation() {
                                     const previewImage = document.getElementById('preview-image');
                                     const imageContainer = document.getElementById('image-container');
-                                    if (!previewImage || !imageContainer) return;
+                                    const previewContainer = document.getElementById('image-preview-container');
+                                    if (!previewImage || !imageContainer || !previewContainer) return;
                                     
                                     const rotation = pageRotations[currentPage] || 0;
                                     
-                                    // UPDATED: First adjust container, then apply rotation
-                                    adjustContainerForRotation(rotation);
+                                    // Reset any previous styling
+                                    previewImage.style.transform = '';
+                                    previewImage.style.transformOrigin = 'center center';
+                                    previewImage.style.maxWidth = '';
+                                    previewImage.style.width = '';
+                                    previewImage.style.height = '';
+                                    imageContainer.style.height = '';
+                                    imageContainer.style.width = '';
+                                    imageContainer.style.position = 'relative';
                                     
-                                    // UPDATED: Enhanced rotation with proper fitting
-                                    if (rotation === 90 || rotation === 270) {
-                                        // For 90° and 270° rotations, we need to adjust the container and image
-                                        const naturalWidth = previewImage.naturalWidth;
-                                        const naturalHeight = previewImage.naturalHeight;
+                                    // Get natural dimensions
+                                    const naturalWidth = previewImage.naturalWidth;
+                                    const naturalHeight = previewImage.naturalHeight;
+                                    
+                                    if (naturalWidth && naturalHeight) {
+                                        // Get available space in the preview container
+                                        const containerRect = previewContainer.getBoundingClientRect();
+                                        const containerStyle = window.getComputedStyle(previewContainer);
+                                        const paddingX = parseFloat(containerStyle.paddingLeft) + parseFloat(containerStyle.paddingRight);
+                                        const paddingY = parseFloat(containerStyle.paddingTop) + parseFloat(containerStyle.paddingBottom);
                                         
-                                        if (naturalWidth && naturalHeight) {
-                                            // Calculate the scale factor to fit the rotated image
-                                            const containerWidth = imageContainer.clientWidth;
-                                            const aspectRatio = naturalHeight / naturalWidth; // Swapped for rotation
+                                        // Calculate available space with margin for safety
+                                        const availableWidth = containerRect.width - paddingX - 40;
+                                        const availableHeight = containerRect.height - paddingY - 40;
+                                        
+                                        let scale, finalWidth, finalHeight;
+                                        
+                                        if (rotation === 90 || rotation === 270) {
+                                            // For 90° and 270° rotations, we need to consider swapped dimensions
+                                            // The rotated image will have height as width and width as height
+                                            const scaleForWidth = availableWidth / naturalHeight;
+                                            const scaleForHeight = availableHeight / naturalWidth;
+                                            scale = Math.min(scaleForWidth, scaleForHeight, 1);
                                             
-                                            // Set transform with proper scaling and rotation
-                                            previewImage.style.transform = `rotate(${rotation}deg) scale(${aspectRatio})`;
-                                            previewImage.style.transformOrigin = 'center center';
-                                            previewImage.style.maxWidth = 'none';
-                                            previewImage.style.width = `${containerWidth / aspectRatio}px`;
-                                            previewImage.style.height = 'auto';
+                                            // Final dimensions after scaling (but before rotation)
+                                            finalWidth = naturalWidth * scale;
+                                            finalHeight = naturalHeight * scale;
+                                            
                                         } else {
-                                            // Fallback for when natural dimensions aren't available yet
-                                            previewImage.style.transform = `rotate(${rotation}deg)`;
-                                            previewImage.style.transformOrigin = 'center center';
+                                            // For 0° and 180° rotations, use normal dimensions
+                                            const scaleForWidth = availableWidth / naturalWidth;
+                                            const scaleForHeight = availableHeight / naturalHeight;
+                                            scale = Math.min(scaleForWidth, scaleForHeight, 1);
+                                            
+                                            finalWidth = naturalWidth * scale;
+                                            finalHeight = naturalHeight * scale;
                                         }
-                                    } else {
-                                        // For 0° and 180° rotations, use standard fitting
+                                        
+                                        // Apply image dimensions (these are the dimensions before rotation)
+                                        previewImage.style.width = `${finalWidth}px`;
+                                        previewImage.style.height = `${finalHeight}px`;
+                                        previewImage.style.maxWidth = 'none';
+                                        previewImage.style.maxHeight = 'none';
+                                        
+                                        // Container should be sized to accommodate the rotated image
+                                        if (rotation === 90 || rotation === 270) {
+                                            // For rotated images, container needs to be sized for the rotated dimensions
+                                            imageContainer.style.width = `${finalHeight}px`;  // Swapped
+                                            imageContainer.style.height = `${finalWidth}px`;  // Swapped
+                                        } else {
+                                            imageContainer.style.width = `${finalWidth}px`;
+                                            imageContainer.style.height = `${finalHeight}px`;
+                                        }
+                                        
+                                        imageContainer.style.overflow = 'visible';
+                                        
+                                        // Apply rotation
                                         previewImage.style.transform = `rotate(${rotation}deg)`;
-                                        previewImage.style.transformOrigin = 'center center';
+                                        
+                                        // Ensure container is centered
+                                        imageContainer.style.margin = '0 auto';
+                                        
+                                    } else {
+                                        // Fallback for when natural dimensions aren't available yet
+                                        previewImage.style.transform = `rotate(${rotation}deg)`;
                                         previewImage.style.maxWidth = '100%';
-                                        previewImage.style.width = 'auto';
                                         previewImage.style.height = 'auto';
                                     }
                                     
@@ -251,8 +297,8 @@
                                     });
                                 }
                             </script>
-                            <div id="image-container" class="relative border border-gray-300 rounded overflow-hidden transition-all duration-300">
-                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="max-w-full h-auto transition-transform duration-300" style="display: none;" onload="handleImageLoad()">
+                            <div id="image-container" class="relative transition-all duration-300">
+                                <img id="preview-image" src="{{ $ocrResult->getImagePathForPage(1) }}" class="block transition-transform duration-300" style="display: none;" onload="handleImageLoad()">
                                 <!-- UPDATED: Improved loading placeholder with spinner -->
                                 <div id="loading-placeholder" class="flex items-center justify-center bg-gray-100 h-96">
                                     <div class="text-center">
@@ -264,10 +310,16 @@
                             </div>
                             
                             <script>
-                                // ADDED: Handle image load event to apply rotation after image is loaded
+                                // UPDATED: Handle image load event to apply rotation after image is loaded
                                 function handleImageLoad() {
                                     const previewImage = document.getElementById('preview-image');
-                                    if (previewImage) {
+                                    const loadingPlaceholder = document.getElementById('loading-placeholder');
+                                    
+                                    if (previewImage && loadingPlaceholder) {
+                                        // Hide loading placeholder and show image
+                                        loadingPlaceholder.style.display = 'none';
+                                        previewImage.style.display = 'block';
+                                        
                                         // Apply rotation after image is fully loaded
                                         setTimeout(() => {
                                             applyCurrentPageRotation();
@@ -275,30 +327,10 @@
                                     }
                                 }
                                 
-                                // ADDED: Enhanced rotation function with container adjustment
+                                // UPDATED: Enhanced rotation function with container adjustment
                                 function adjustContainerForRotation(rotation) {
-                                    const previewImage = document.getElementById('preview-image');
-                                    const imageContainer = document.getElementById('image-container');
-                                    if (!previewImage || !imageContainer) return;
-                                    
-                                    const naturalWidth = previewImage.naturalWidth;
-                                    const naturalHeight = previewImage.naturalHeight;
-                                    
-                                    if (naturalWidth && naturalHeight) {
-                                        if (rotation === 90 || rotation === 270) {
-                                            // For 90° and 270° rotations, swap dimensions
-                                            const containerMaxWidth = imageContainer.parentElement.clientWidth;
-                                            const rotatedAspectRatio = naturalWidth / naturalHeight; // Original aspect ratio
-                                            const newHeight = containerMaxWidth * rotatedAspectRatio;
-                                            
-                                            imageContainer.style.height = `${newHeight}px`;
-                                            imageContainer.style.width = '100%';
-                                        } else {
-                                            // For 0° and 180° rotations, use original proportions
-                                            imageContainer.style.height = 'auto';
-                                            imageContainer.style.width = '100%';
-                                        }
-                                    }
+                                    // This function is no longer needed as rotation logic is handled in applyCurrentPageRotation
+                                    return;
                                 }
                             </script>
                         </div>
@@ -471,11 +503,6 @@
         .image-container {
             position: relative;
             display: inline-block;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            overflow: hidden;
-            background-color: #f9fafb;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             max-width: 100%;
             /* UPDATED: Improved responsive image container */
             width: fit-content;
@@ -489,7 +516,6 @@
             /* UPDATED: Improved image display */
             min-height: 400px;
             object-fit: contain;
-            background-color: white;
         }
 
         .loading-placeholder {
@@ -758,9 +784,24 @@
             handleMouseDown(e) {
                 if (!this.imageContainer.classList.contains('drawing-mode')) return;
                 
-                const rect = this.imageContainer.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+                // Check if click is within the image bounds (not on gray background)
+                const imageRect = this.previewImage.getBoundingClientRect();
+                const containerRect = this.imageContainer.getBoundingClientRect();
+                
+                // Calculate relative position within the container
+                const x = e.clientX - containerRect.left;
+                const y = e.clientY - containerRect.top;
+                
+                // Check if the click is within the actual image bounds
+                const imageLeft = (containerRect.width - imageRect.width) / 2;
+                const imageTop = (containerRect.height - imageRect.height) / 2;
+                const imageRight = imageLeft + imageRect.width;
+                const imageBottom = imageTop + imageRect.height;
+                
+                // Only allow region selection within the actual image area
+                if (x < imageLeft || x > imageRight || y < imageTop || y > imageBottom) {
+                    return; // Click is on gray background, ignore
+                }
 
                 this.isDrawing = true;
                 this.drawingRegion = {
@@ -777,9 +818,22 @@
             handleMouseMove(e) {
                 if (!this.isDrawing || !this.drawingRegion) return;
 
-                const rect = this.imageContainer.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+                // Get image and container bounds to constrain drawing within image area
+                const imageRect = this.previewImage.getBoundingClientRect();
+                const containerRect = this.imageContainer.getBoundingClientRect();
+                
+                let x = e.clientX - containerRect.left;
+                let y = e.clientY - containerRect.top;
+                
+                // Calculate image boundaries within container
+                const imageLeft = (containerRect.width - imageRect.width) / 2;
+                const imageTop = (containerRect.height - imageRect.height) / 2;
+                const imageRight = imageLeft + imageRect.width;
+                const imageBottom = imageTop + imageRect.height;
+                
+                // Constrain coordinates to image boundaries
+                x = Math.max(imageLeft, Math.min(x, imageRight));
+                y = Math.max(imageTop, Math.min(y, imageBottom));
 
                 this.drawingRegion.currentX = x;
                 this.drawingRegion.currentY = y;
