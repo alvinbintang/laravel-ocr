@@ -74,21 +74,42 @@ class ProcessRegions implements ShouldQueue
             $ocrImageHeight = $image->height();
 
             foreach ($this->regions as $region) {
-                // FIXED: Since the backend image is not rotated but coordinates are already correct,
-                // we don't need coordinate transformation - just use the original coordinates
-                \Log::info("Processing region without coordinate transformation", [
-                    'page' => $this->currentPage,
-                    'rotation' => $rotation,
-                    'region_coords' => [
-                        'x' => $region['x'],
-                        'y' => $region['y'],
-                        'width' => $region['width'],
-                        'height' => $region['height']
-                    ]
-                ]);
+                // FIXED: Frontend sends coordinates from rotated view, but backend processes original image
+                // We need to transform coordinates from rotated view back to original image coordinates
+                if ($rotation > 0) {
+                    $transformedRegion = $this->transformCoordinatesFromRotatedView($region, $rotation);
+                    \Log::info("Transformed coordinates from rotated view", [
+                        'page' => $this->currentPage,
+                        'rotation' => $rotation,
+                        'original_coords' => [
+                            'x' => $region['x'],
+                            'y' => $region['y'],
+                            'width' => $region['width'],
+                            'height' => $region['height']
+                        ],
+                        'transformed_coords' => [
+                            'x' => $transformedRegion['x'],
+                            'y' => $transformedRegion['y'],
+                            'width' => $transformedRegion['width'],
+                            'height' => $transformedRegion['height']
+                        ]
+                    ]);
+                } else {
+                    $transformedRegion = $region;
+                    \Log::info("No rotation, using original coordinates", [
+                        'page' => $this->currentPage,
+                        'rotation' => $rotation,
+                        'region_coords' => [
+                            'x' => $region['x'],
+                            'y' => $region['y'],
+                            'width' => $region['width'],
+                            'height' => $region['height']
+                        ]
+                    ]);
+                }
 
                 // ADDED: Scale coordinates from preview to OCR image dimensions
-                $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
+                $scaledRegion = $this->scaleCoordinates($transformedRegion, $ocrImageWidth, $ocrImageHeight);
 
                 // Crop the region from the image
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
