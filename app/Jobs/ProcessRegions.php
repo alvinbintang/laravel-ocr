@@ -75,14 +75,13 @@ class ProcessRegions implements ShouldQueue
             $ocrImageHeight = $image->height();
 
             foreach ($this->regions as $region) {
-                // ADDED: Scale coordinates from preview to OCR image dimensions
-                $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
-
-                // UPDATED: Apply inverse transformation first if image is rotated
-                // Frontend sends coordinates relative to rotated view, we need to convert back to original image coordinates
+                // UPDATED: Apply coordinate transformation based on rotation BEFORE scaling
+                $transformedRegion = $region;
+                
+                // If image is rotated, transform coordinates from rotated view to original image coordinates
                 if ($rotation > 0) {
-                    $scaledRegion = $this->inverseTransformCoordinatesForRotation($scaledRegion, $ocrImageWidth, $ocrImageHeight, $rotation);
-                    \Log::info("Applied inverse coordinate transformation for rotation", [
+                    $transformedRegion = $this->transformCoordinatesFromRotatedView($region, $rotation);
+                    \Log::info("Applied coordinate transformation from rotated view", [
                         'page' => $this->currentPage,
                         'rotation' => $rotation,
                         'original_coords' => [
@@ -91,14 +90,17 @@ class ProcessRegions implements ShouldQueue
                             'width' => $region['width'],
                             'height' => $region['height']
                         ],
-                        'inverse_transformed_coords' => [
-                            'x' => $scaledRegion['x'],
-                            'y' => $scaledRegion['y'],
-                            'width' => $scaledRegion['width'],
-                            'height' => $scaledRegion['height']
+                        'transformed_coords' => [
+                            'x' => $transformedRegion['x'],
+                            'y' => $transformedRegion['y'],
+                            'width' => $transformedRegion['width'],
+                            'height' => $transformedRegion['height']
                         ]
                     ]);
                 }
+
+                // ADDED: Scale coordinates from preview to OCR image dimensions AFTER transformation
+                $scaledRegion = $this->scaleCoordinates($transformedRegion, $ocrImageWidth, $ocrImageHeight);
 
                 // Crop the region from the image
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
@@ -323,10 +325,18 @@ class ProcessRegions implements ShouldQueue
         ];
     }
 
-    // UPDATED: Helper method to apply inverse coordinate transformation for rotated images
-    // This converts coordinates from rotated view back to original image coordinates
-    private function inverseTransformCoordinatesForRotation(array $region, int $imageWidth, int $imageHeight, int $rotation): array
+    // UPDATED: Helper method to transform coordinates from rotated view to original image coordinates
+    // This handles the coordinate transformation based on how the frontend displays the rotated image
+    private function transformCoordinatesFromRotatedView(array $region, int $rotation): array
     {
+        // Get preview dimensions to understand the coordinate space
+        if (!$this->previewDimensions) {
+            return $region; // No transformation if we don't have preview dimensions
+        }
+        
+        $previewWidth = $this->previewDimensions['width'];
+        $previewHeight = $this->previewDimensions['height'];
+        
         $x = $region['x'];
         $y = $region['y'];
         $width = $region['width'];
@@ -336,28 +346,31 @@ class ProcessRegions implements ShouldQueue
         $rotation = $rotation % 360;
         if ($rotation < 0) $rotation += 360;
 
-        // Apply inverse transformation (opposite of what was applied to the image)
+        // Transform coordinates based on rotation
+        // These transformations match how the frontend rotates the image display
         switch ($rotation) {
             case 90:
-                // Inverse of 90 degrees clockwise: (x,y) -> (imageHeight - y - height, x)
-                $newX = $imageHeight - $y - $height;
-                $newY = $x;
+                // For 90° rotation: coordinates need to be transformed from rotated view
+                // In rotated view: width and height are swapped
+                $newX = $y;
+                $newY = $previewWidth - $x - $width;
                 $newWidth = $height;
                 $newHeight = $width;
                 break;
                 
             case 180:
-                // Inverse of 180 degrees: (x,y) -> (imageWidth - x - width, imageHeight - y - height)
-                $newX = $imageWidth - $x - $width;
-                $newY = $imageHeight - $y - $height;
+                // For 180° rotation: coordinates are flipped both horizontally and vertically
+                $newX = $previewWidth - $x - $width;
+                $newY = $previewHeight - $y - $height;
                 $newWidth = $width;
                 $newHeight = $height;
                 break;
                 
             case 270:
-                // Inverse of 270 degrees clockwise: (x,y) -> (y, imageWidth - x - width)
-                $newX = $y;
-                $newY = $imageWidth - $x - $width;
+                // For 270° rotation: coordinates need to be transformed from rotated view
+                // In rotated view: width and height are swapped
+                $newX = $previewHeight - $y - $height;
+                $newY = $x;
                 $newWidth = $height;
                 $newHeight = $width;
                 break;

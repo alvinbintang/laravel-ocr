@@ -173,7 +173,7 @@ class OcrApiController extends Controller
             'regions.*.height' => 'required|numeric',
             'regions.*.page' => 'required|integer|min:1', // ADDED: Required page field
             'previewDimensions' => 'nullable|array',
-            'pageRotation' => 'nullable|array'
+            'pageRotations' => 'nullable|array' // UPDATED: Changed from pageRotation to pageRotations
         ]);
 
         if ($validator->fails()) {
@@ -187,7 +187,7 @@ class OcrApiController extends Controller
         try {
             // UPDATED: Process each page separately since service expects single page rotation
             $regionsByPage = collect($request->regions)->groupBy('page');
-            $pageRotations = $request->input('pageRotation', []);
+            $pageRotations = $request->input('pageRotations', []); // UPDATED: Changed from pageRotation to pageRotations
             
             foreach ($regionsByPage as $page => $pageRegions) {
                 $pageRotation = isset($pageRotations[$page]) ? (int)$pageRotations[$page] : null;
