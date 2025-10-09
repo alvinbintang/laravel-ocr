@@ -114,6 +114,17 @@ class ProcessRegions implements ShouldQueue
                 // Crop the region from the image
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
                 
+                // FIXED: Apply rotation to cropped image to match frontend display
+                if ($rotation > 0) {
+                    $croppedImage->rotate(-$rotation); // Negative because Intervention Image rotates counter-clockwise
+                    \Log::info("Applied rotation to cropped image", [
+                        'page' => $this->currentPage,
+                        'region_id' => $region['id'],
+                        'rotation' => $rotation,
+                        'applied_rotation' => -$rotation
+                    ]);
+                }
+                
                 // Save cropped image for debugging and permanent storage
                 $croppedImageName = "cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
                 $croppedImagePath = "ocr_results/{$this->ocrResultId}/cropped/{$croppedImageName}";
