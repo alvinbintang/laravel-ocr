@@ -141,10 +141,11 @@ class OcrService
      * @param int $id
      * @param array $regions
      * @param array|null $previewDimensions
+     * @param array|null $pageRotations // UPDATED: Changed to accept array of rotations
      * @return array
      * @throws \Exception
      */
-    public function processRegions(int $id, array $regions, ?array $previewDimensions = null, ?int $pageRotation = null): array
+    public function processRegions(int $id, array $regions, ?array $previewDimensions = null, ?array $pageRotations = null): array
     {
         try {
             $ocrResult = $this->ocrResultRepository->findById($id);
@@ -157,6 +158,9 @@ class OcrService
             
             // Process each page's regions separately
             foreach ($regionsByPage as $page => $pageRegions) {
+                // UPDATED: Get specific rotation for this page
+                $pageRotation = isset($pageRotations[$page]) ? (int)$pageRotations[$page] : 0;
+                
                 ProcessRegions::dispatch($id, $pageRegions, (int)$page, $previewDimensions, $pageRotation);
             }
 

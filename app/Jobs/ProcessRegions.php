@@ -325,71 +325,19 @@ class ProcessRegions implements ShouldQueue
         ];
     }
 
-    // UPDATED: Helper method to transform coordinates from rotated view to original image coordinates
-    // This handles the coordinate transformation based on how the frontend displays the rotated image
+    // FIXED: Transform coordinates from rotated view to original image coordinates
+    // Since the image is already rotated in the backend, we don't need coordinate transformation
     private function transformCoordinatesFromRotatedView(array $region, int $rotation): array
     {
-        // Get preview dimensions to understand the coordinate space
-        if (!$this->previewDimensions) {
-            return $region; // No transformation if we don't have preview dimensions
-        }
-        
-        $previewWidth = $this->previewDimensions['width'];
-        $previewHeight = $this->previewDimensions['height'];
-        
-        $x = $region['x'];
-        $y = $region['y'];
-        $width = $region['width'];
-        $height = $region['height'];
-
-        // Normalize rotation to 0-359 degrees
-        $rotation = $rotation % 360;
-        if ($rotation < 0) $rotation += 360;
-
-        // Transform coordinates based on rotation
-        // These transformations match how the frontend rotates the image display
-        switch ($rotation) {
-            case 90:
-                // For 90° rotation: coordinates need to be transformed from rotated view
-                // In rotated view: width and height are swapped
-                $newX = $y;
-                $newY = $previewWidth - $x - $width;
-                $newWidth = $height;
-                $newHeight = $width;
-                break;
-                
-            case 180:
-                // For 180° rotation: coordinates are flipped both horizontally and vertically
-                $newX = $previewWidth - $x - $width;
-                $newY = $previewHeight - $y - $height;
-                $newWidth = $width;
-                $newHeight = $height;
-                break;
-                
-            case 270:
-                // For 270° rotation: coordinates need to be transformed from rotated view
-                // In rotated view: width and height are swapped
-                $newX = $previewHeight - $y - $height;
-                $newY = $x;
-                $newWidth = $height;
-                $newHeight = $width;
-                break;
-                
-            default:
-                // No rotation or unsupported angle
-                $newX = $x;
-                $newY = $y;
-                $newWidth = $width;
-                $newHeight = $height;
-                break;
-        }
-
+        // FIXED: Don't transform coordinates here - the image is already rotated in the backend
+        // The frontend coordinates are already correct for the rotated image
+        // We just need to return the original coordinates as-is
         return [
             'id' => $region['id'],
-            'x' => (int) round($newX),
-            'y' => (int) round($newY),
-            'width' => (int) round($newWidth),
-            'height' => (int) round($newHeight),
+            'x' => $region['x'],
+            'y' => $region['y'],
+            'width' => $region['width'],
+            'height' => $region['height'],
             'page' => $region['page'] ?? $this->currentPage
         ];
     }
