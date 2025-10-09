@@ -326,18 +326,69 @@ class ProcessRegions implements ShouldQueue
     }
 
     // FIXED: Transform coordinates from rotated view to original image coordinates
-    // Since the image is already rotated in the backend, we don't need coordinate transformation
     private function transformCoordinatesFromRotatedView(array $region, int $rotation): array
     {
-        // FIXED: Don't transform coordinates here - the image is already rotated in the backend
-        // The frontend coordinates are already correct for the rotated image
-        // We just need to return the original coordinates as-is
+        // Get the original image dimensions (before rotation)
+        $ocrResult = OcrResult::findOrFail($this->ocrResultId);
+        $imagePaths = $ocrResult->image_paths ?? [];
+        $imagePath = storage_path('app/public/' . $imagePaths[$this->currentPage - 1]);
+        
+        // Read original image to get dimensions
+        $originalImage = Image::read($imagePath);
+        $originalWidth = $originalImage->width();
+        $originalHeight = $originalImage->height();
+        
+        $x = $region['x'];
+        $y = $region['y'];
+        $width = $region['width'];
+        $height = $region['height'];
+
+        // Normalize rotation to 0-359 degrees
+        $rotation = $rotation % 360;
+        if ($rotation < 0) $rotation += 360;
+
+        // Transform coordinates based on rotation
+        // Frontend coordinates are based on rotated view, we need to transform back to original coordinates
+        switch ($rotation) {
+            case 90:
+                // For 90° rotation: rotated (x,y) -> original (originalHeight - y - height, x)
+                $newX = $originalHeight - $y - $height;
+                $newY = $x;
+                $newWidth = $height;
+                $newHeight = $width;
+                break;
+                
+            case 180:
+                // For 180° rotation: rotated (x,y) -> original (originalWidth - x - width, originalHeight - y - height)
+                $newX = $originalWidth - $x - $width;
+                $newY = $originalHeight - $y - $height;
+                $newWidth = $width;
+                $newHeight = $height;
+                break;
+                
+            case 270:
+                // For 270° rotation: rotated (x,y) -> original (y, originalWidth - x - width)
+                $newX = $y;
+                $newY = $originalWidth - $x - $width;
+                $newWidth = $height;
+                $newHeight = $width;
+                break;
+                
+            default:
+                // No rotation
+                $newX = $x;
+                $newY = $y;
+                $newWidth = $width;
+                $newHeight = $height;
+                break;
+        }
+
         return [
             'id' => $region['id'],
-            'x' => $region['x'],
-            'y' => $region['y'],
-            'width' => $region['width'],
-            'height' => $region['height'],
+            'x' => (int) round($newX),
+            'y' => (int) round($newY),
+            'width' => (int) round($newWidth),
+            'height' => (int) round($newHeight),
             'page' => $region['page'] ?? $this->currentPage
         ];
     }
