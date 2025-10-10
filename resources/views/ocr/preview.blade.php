@@ -1128,7 +1128,7 @@
             
             pollForCropCompletion() {
                 const checkStatus = () => {
-                    fetch(`/ocr/{{ $ocrResult->id }}/status`)
+                    fetch(`/ocr/{{ $ocrResult->id }}/status-check`)
                         .then(response => response.json())
                         .then(data => {
                             if (data.status === 'awaiting_confirmation') {

@@ -447,8 +447,8 @@ class OcrService
                     
                     \Log::info('Regions prepared for page ' . $page . ': ', $regions);
                     
-                    // Get page rotation
-                    $pageRotations = json_decode($ocrResult->page_rotations ?? '[]', true);
+                    // Get page rotation (already decoded by model accessor)
+                    $pageRotations = $ocrResult->page_rotations ?? [];
                     $pageRotation = isset($pageRotations[$page]) ? (int)$pageRotations[$page] : 0;
                     
                     \Log::info('Page rotation for page ' . $page . ': ' . $pageRotation);
