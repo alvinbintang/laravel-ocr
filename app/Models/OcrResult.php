@@ -20,6 +20,8 @@ class OcrResult extends Model
         'selected_regions', // ADDED: Store selected regions data
         'cropped_images', // ADDED: Store cropped images paths
         'page_rotations', // ADDED: Store page rotation angles
+        'crop_confirmed_at', // ADDED: Timestamp when crop was confirmed
+        'crop_preview_data', // ADDED: Store crop preview data for confirmation
     ];
 
     // Helper method to get all image paths
@@ -69,5 +71,24 @@ class OcrResult extends Model
     public function getCroppedImagesAttribute($value)
     {
         return $value ? json_decode($value, true) : [];
+    }
+
+    // ADDED: Helper method to get crop preview data
+    public function getCropPreviewDataAttribute($value)
+    {
+        return $value ? json_decode($value, true) : [];
+    }
+
+    // ADDED: Helper method to check if crop has been confirmed
+    public function isCropConfirmed()
+    {
+        return !is_null($this->crop_confirmed_at);
+    }
+
+    // ADDED: Helper method to mark crop as confirmed
+    public function confirmCrop()
+    {
+        $this->crop_confirmed_at = now();
+        $this->save();
     }
 }

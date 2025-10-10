@@ -66,7 +66,7 @@
                                     Clear All
                                 </button>
                                 <button id="process-regions-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium" disabled>
-                                    Process OCR
+                                    Crop & Preview
                                 </button>
                             </div>
                             @endif
@@ -1047,7 +1047,7 @@
 
                 // Disable buttons and show processing state
                 this.processRegionsBtn.disabled = true;
-                this.processRegionsBtn.innerHTML = '<span class="inline-block animate-spin mr-2">↻</span> Processing...';
+                this.processRegionsBtn.innerHTML = '<span class="inline-block animate-spin mr-2">↻</span> Cropping...';
                 this.addRegionBtn.disabled = true;
                 this.clearRegionsBtn.disabled = true;
 
@@ -1070,8 +1070,8 @@
                 // UPDATED: Send all page rotations instead of just current page
                 const allPageRotations = pageRotations || {};
 
-                // Send to server
-                fetch('{{ route("ocr.process-regions", $ocrResult->id) }}', {
+                // Send to server for cropping only
+                fetch('{{ route("ocr.crop-regions", $ocrResult->id) }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1086,31 +1086,31 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        // Show processing message
+                        // Show cropping message
                         const processingDiv = document.createElement('div');
                         processingDiv.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
                         processingDiv.innerHTML = `
                             <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-                                <h3 class="text-lg font-medium mb-4">Processing OCR</h3>
+                                <h3 class="text-lg font-medium mb-4">Cropping Images</h3>
                                 <div class="flex items-center mb-4">
                                     <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mr-3"></div>
-                                    <p>Processing ${this.regions.length} regions across ${Object.keys(this.regions.reduce((acc, r) => ({...acc, [r.page]: true}), {})).length} pages...</p>
+                                    <p>Cropping ${this.regions.length} regions across ${Object.keys(this.regions.reduce((acc, r) => ({...acc, [r.page]: true}), {})).length} pages...</p>
                                 </div>
-                                <p class="text-sm text-gray-500">This may take a few moments. Please don't close this window.</p>
+                                <p class="text-sm text-gray-500">Please wait while we prepare your crop preview.</p>
                             </div>
                         `;
                         document.body.appendChild(processingDiv);
                         
-                        // Poll for status and redirect when done
-                        this.pollForResults();
+                        // Poll for crop completion and redirect to preview
+                        this.pollForCropCompletion();
                     } else {
                         // Reset buttons
                         this.processRegionsBtn.disabled = false;
-                        this.processRegionsBtn.textContent = 'Process OCR';
+                        this.processRegionsBtn.textContent = 'Crop & Preview';
                         this.addRegionBtn.disabled = false;
                         this.clearRegionsBtn.disabled = false;
                         
-                        alert('Error processing regions: ' + (data.message || 'Unknown error'));
+                        alert('Error cropping regions: ' + (data.message || 'Unknown error'));
                     }
                 })
                 .catch(error => {
@@ -1118,38 +1118,49 @@
                     
                     // Reset buttons
                     this.processRegionsBtn.disabled = false;
-                    this.processRegionsBtn.textContent = 'Process OCR';
+                    this.processRegionsBtn.textContent = 'Crop & Preview';
                     this.addRegionBtn.disabled = false;
                     this.clearRegionsBtn.disabled = false;
                     
-                    alert('Error processing regions. Please try again.');
+                    alert('Error cropping regions. Please try again.');
                 });
             }
             
-            pollForResults() {
+            pollForCropCompletion() {
                 const checkStatus = () => {
-                    fetch('{{ route("ocr.status-check", $ocrResult->id) }}')
+                    fetch(`/ocr/{{ $ocrResult->id }}/status`)
                         .then(response => response.json())
                         .then(data => {
-                            if (data.status === 'done') {
-                                window.location.href = '{{ route("ocr.index") }}';
+                            if (data.status === 'awaiting_confirmation') {
+                                // Crop completed, redirect to preview
+                                window.location.href = `/ocr/{{ $ocrResult->id }}/crop-preview`;
                             } else if (data.status === 'error') {
-                                alert('Error processing OCR: ' + (data.message || 'Unknown error'));
-                                window.location.reload();
+                                // Remove loading overlay
+                                const processingDiv = document.querySelector('.fixed.inset-0.bg-black.bg-opacity-50');
+                                if (processingDiv) {
+                                    processingDiv.remove();
+                                }
+                                
+                                // Reset buttons
+                                this.processRegionsBtn.disabled = false;
+                                this.processRegionsBtn.textContent = 'Crop & Preview';
+                                this.addRegionBtn.disabled = false;
+                                this.clearRegionsBtn.disabled = false;
+                                
+                                alert('Error during cropping: ' + (data.message || 'Unknown error'));
                             } else {
-                                // Still processing, check again in 2 seconds
+                                // Still processing, check again
                                 setTimeout(checkStatus, 2000);
                             }
                         })
                         .catch(error => {
                             console.error('Error checking status:', error);
-                            // Try again in 3 seconds
-                            setTimeout(checkStatus, 3000);
+                            setTimeout(checkStatus, 2000);
                         });
                 };
                 
-                // Start polling
-                setTimeout(checkStatus, 2000);
+                // Start checking after a short delay
+                setTimeout(checkStatus, 1000);
             }
         }
 

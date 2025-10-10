@@ -306,4 +306,137 @@ class OcrService
             ];
         }
     }
+
+    /**
+     * Crop regions only (without OCR processing)
+     *
+     * @param int $id
+     * @param array $regions
+     * @param array|null $previewDimensions
+     * @param array|null $pageRotations
+     * @return array
+     * @throws \Exception
+     */
+    public function cropRegions(int $id, array $regions, ?array $previewDimensions = null, ?array $pageRotations = null): array
+    {
+        try {
+            $ocrResult = $this->ocrResultRepository->findById($id);
+            
+            // Update status to processing
+            $this->ocrResultRepository->updateStatus($id, 'processing');
+            
+            // Group regions by page
+            $regionsByPage = collect($regions)->groupBy('page')->toArray();
+            
+            // Process each page's regions separately (crop only)
+            foreach ($regionsByPage as $page => $pageRegions) {
+                // Get specific rotation for this page
+                $pageRotation = isset($pageRotations[$page]) ? (int)$pageRotations[$page] : 0;
+                
+                \App\Jobs\CropRegions::dispatch($id, $pageRegions, (int)$page, $previewDimensions, $pageRotation);
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Cropping selected regions',
+                'status' => 'processing'
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Error cropping regions: ' . $e->getMessage(),
+                'status' => 'error'
+            ];
+        }
+    }
+
+    /**
+     * Get crop preview data
+     *
+     * @param int $id
+     * @return array
+     */
+    public function getCropPreview(int $id): array
+    {
+        $ocrResult = $this->ocrResultRepository->findById($id);
+        
+        if ($ocrResult->status !== 'awaiting_confirmation') {
+            return [
+                'success' => false,
+                'message' => 'Crop preview not available',
+                'status' => $ocrResult->status
+            ];
+        }
+
+        return [
+            'success' => true,
+            'ocr_result' => $ocrResult,
+            'cropped_images' => $ocrResult->cropped_images ?? [],
+            'message' => 'Crop preview ready'
+        ];
+    }
+
+    /**
+     * Confirm crop and proceed with OCR processing
+     *
+     * @param int $id
+     * @return array
+     */
+    public function confirmCrop(int $id): array
+    {
+        try {
+            $ocrResult = $this->ocrResultRepository->findById($id);
+            
+            if ($ocrResult->status !== 'awaiting_confirmation') {
+                return [
+                    'success' => false,
+                    'message' => 'Cannot confirm crop at this stage',
+                    'status' => $ocrResult->status
+                ];
+            }
+
+            // Update status to processing for OCR
+            $this->ocrResultRepository->updateStatus($id, 'processing');
+
+            // Get cropped images and process them with OCR
+            $croppedImages = $ocrResult->cropped_images ?? [];
+            
+            // Group cropped images by page for OCR processing
+            $imagesByPage = collect($croppedImages)->groupBy('page')->toArray();
+            
+            foreach ($imagesByPage as $page => $pageImages) {
+                // Convert cropped images back to region format for ProcessRegions job
+                $regions = [];
+                foreach ($pageImages as $image) {
+                    $regions[] = [
+                        'id' => $image['region_id'],
+                        'x' => $image['coordinates']['x'],
+                        'y' => $image['coordinates']['y'],
+                        'width' => $image['coordinates']['width'],
+                        'height' => $image['coordinates']['height'],
+                        'page' => $image['page']
+                    ];
+                }
+                
+                // Get page rotation
+                $pageRotations = json_decode($ocrResult->page_rotations ?? '[]', true);
+                $pageRotation = isset($pageRotations[$page]) ? (int)$pageRotations[$page] : 0;
+                
+                // Dispatch OCR processing job
+                ProcessRegions::dispatch($id, $regions, (int)$page, null, $pageRotation);
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Processing OCR on confirmed crops',
+                'status' => 'processing'
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Error confirming crop: ' . $e->getMessage(),
+                'status' => 'error'
+            ];
+        }
+    }
 }

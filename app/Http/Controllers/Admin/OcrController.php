@@ -60,28 +60,73 @@ class OcrController extends Controller
         ]);
     }
 
-    public function processRegions(ProcessRegionsRequest $request, $id)
+    /**
+     * Process regions (crop only, without OCR)
+     *
+     * @param ProcessRegionsRequest $request
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function cropRegions(ProcessRegionsRequest $request, int $id)
     {
-        $result = $this->ocrService->processRegions( // UPDATED: changed from processSelectedRegions()
-            $id, 
-            $request->regions, 
-            $request->input('previewDimensions'),
-            $request->input('pageRotation') // ADDED: Pass page rotation to service
-        );
+        $regions = $request->input('regions');
+        $previewDimensions = $request->input('previewDimensions');
+        $pageRotations = $request->input('pageRotations', []);
 
-        if ($result['success']) { // UPDATED: check success from result
-            return response()->json([
-                'message' => $result['message'],
-                'status' => $result['status'],
-                'success' => true
-            ]);
-        } else {
-            return response()->json([
-                'message' => $result['message'],
-                'status' => $result['status'],
-                'success' => false
-            ], 500);
+        $result = $this->ocrService->cropRegions($id, $regions, $previewDimensions, $pageRotations);
+
+        return response()->json($result);
+    }
+
+    /**
+     * Show crop preview page
+     *
+     * @param int $id
+     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
+     */
+    public function cropPreview(int $id)
+    {
+        $result = $this->ocrService->getCropPreview($id);
+        
+        if (!$result['success']) {
+            return redirect()->route('ocr.preview', $id)->with('error', $result['message']);
         }
+
+        return view('ocr.crop-preview', [
+            'ocrResult' => $result['ocr_result'],
+            'croppedImages' => $result['cropped_images']
+        ]);
+    }
+
+    /**
+     * Confirm crop and proceed with OCR
+     *
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function confirmCrop(int $id)
+    {
+        $result = $this->ocrService->confirmCrop($id);
+        
+        return response()->json($result);
+    }
+
+    /**
+     * Process regions (original method for direct OCR)
+     *
+     * @param ProcessRegionsRequest $request
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function processRegions(ProcessRegionsRequest $request, int $id)
+    {
+        $regions = $request->input('regions');
+        $previewDimensions = $request->input('previewDimensions');
+        $pageRotations = $request->input('pageRotations', []);
+
+        $result = $this->ocrService->processRegions($id, $regions, $previewDimensions, $pageRotations);
+
+        return response()->json($result);
     }
 
     public function showResult($id)

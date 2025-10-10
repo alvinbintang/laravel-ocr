@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Controller; // ADDED: Missing import
 use App\Services\Admin\ExcelExportService;
 
 class ExcelExportController extends Controller

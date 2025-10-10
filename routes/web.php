@@ -9,6 +9,9 @@ Route::post('/ocr/extract', [OcrController::class, 'extract'])->name('ocr.extrac
 Route::get('/ocr/{id}/preview', [OcrController::class, 'preview'])->name('ocr.preview');
 Route::get('/ocr/{id}/status', [OcrController::class, 'status'])->name('ocr.status');
 Route::get('/ocr/{id}/status-check', [OcrController::class, 'statusCheck'])->name('ocr.status-check'); // ADDED: API endpoint for status checking
+Route::post('/ocr/{id}/crop-regions', [OcrController::class, 'cropRegions'])->name('ocr.crop-regions');
+Route::get('/ocr/{id}/crop-preview', [OcrController::class, 'cropPreview'])->name('ocr.crop-preview');
+Route::post('/ocr/{id}/confirm-crop', [OcrController::class, 'confirmCrop'])->name('ocr.confirm-crop');
 Route::post('/ocr/{id}/process-regions', [OcrController::class, 'processRegions'])->name('ocr.process-regions');
 Route::get('/ocr/{id}/result', [OcrController::class, 'showResult'])->name('ocr.result');
 Route::get('/ocr/export/{id}', [ExcelExportController::class, 'exportToExcel'])->name('ocr.export');
