@@ -52,9 +52,8 @@ class ProcessRegions implements ShouldQueue
 
             $imagePath = storage_path('app/public/' . $imagePaths[$this->currentPage - 1]);
             
-            // Initialize arrays for results and cropped images
-            $results = [];
-            $croppedImages = [];
+            // Initialize array for OCR results
+        $results = [];
 
             $image = Image::read($imagePath);
             
@@ -125,28 +124,6 @@ class ProcessRegions implements ShouldQueue
                     ]);
                 }
                 
-                // Save cropped image for debugging and permanent storage
-                $croppedImageName = "cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
-                $croppedImagePath = "ocr_results/{$this->ocrResultId}/cropped/{$croppedImageName}";
-                $croppedImageFullPath = Storage::disk('public')->path($croppedImagePath);
-                
-                // Ensure directory exists
-                $croppedImageDir = dirname($croppedImageFullPath);
-                if (!is_dir($croppedImageDir)) {
-                    mkdir($croppedImageDir, 0755, true);
-                }
-                
-                // Save cropped image
-                $croppedImage->save($croppedImageFullPath);
-                
-                // Store cropped image info
-                $croppedImages[] = [
-                    'region_id' => $region['id'],
-                    'page' => $this->currentPage,
-                    'path' => $croppedImagePath,
-                    'coordinates' => $scaledRegion
-                ];
-
                 // Save to temporary file for OCR processing
                 $tempPath = tempnam(sys_get_temp_dir(), 'ocr_region_') . '.png';
                 $croppedImage->save($tempPath);
@@ -266,30 +243,22 @@ class ProcessRegions implements ShouldQueue
                 }
             }
 
-            // UPDATED: Merge results with existing OCR results for other pages
+            // Get existing OCR results (don't touch cropped images - they're handled by CropRegions job)
             $existingResults = $ocrResult->ocr_results ?? [];
-            $existingCroppedImages = $ocrResult->cropped_images ?? []; // ADDED: Get existing cropped images
             
             // Remove existing results for this page
             $existingResults = array_filter($existingResults, function($result) {
                 return !isset($result['page']) || $result['page'] != $this->currentPage;
             });
             
-            // ADDED: Remove existing cropped images for this page
-            $existingCroppedImages = array_filter($existingCroppedImages, function($image) {
-                return !isset($image['page']) || $image['page'] != $this->currentPage;
-            });
-            
             // Add new results for this page
             $allResults = array_merge($existingResults, $results);
-            $allCroppedImages = array_merge($existingCroppedImages, $croppedImages); // ADDED: Merge cropped images
 
-            // Update the OCR result
+            // Update the OCR result (don't modify cropped_images here)
             $ocrResult->update([
                 'status' => 'done',
                 'selected_regions' => $this->regions,
-                'ocr_results' => $allResults,
-                'cropped_images' => $allCroppedImages // ADDED: Save cropped images
+                'ocr_results' => $allResults
             ]);
 
         } catch (\Exception $e) {
