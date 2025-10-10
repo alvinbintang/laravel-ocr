@@ -143,6 +143,14 @@
         }
 
         function confirmCrop() {
+            // Disable button to prevent multiple clicks
+            const confirmButton = document.querySelector('button[onclick="confirmCrop()"]');
+            if (confirmButton.disabled) {
+                return; // Prevent multiple submissions
+            }
+            confirmButton.disabled = true;
+            confirmButton.textContent = 'Memproses...';
+            
             // Show loading modal
             document.getElementById('loadingModal').classList.remove('hidden');
             document.getElementById('loadingModal').classList.add('flex');
@@ -165,6 +173,10 @@
                     document.getElementById('loadingModal').classList.remove('flex');
                     
                     alert('Error: ' + data.message);
+                    
+                    // Re-enable button
+                    confirmButton.disabled = false;
+                    confirmButton.textContent = 'Ya, Lanjutkan OCR';
                 }
             })
             .catch(error => {
@@ -174,6 +186,10 @@
                 
                 console.error('Error:', error);
                 alert('Terjadi kesalahan saat memproses OCR');
+                
+                // Re-enable button
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Ya, Lanjutkan OCR';
             });
         }
     </script>
