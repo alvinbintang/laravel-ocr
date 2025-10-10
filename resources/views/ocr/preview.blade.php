@@ -272,6 +272,45 @@
                                     if (window.regionSelector && window.regionSelector.currentPage !== currentPage) {
                                         window.regionSelector.currentPage = currentPage;
                                     }
+                                    
+                                    // ADDED: Sync overlay with image after rotation
+                                    syncOverlayToImage();
+                                }
+                                
+                                // ADDED: Function to sync overlay positioning and rotation with image
+                                function syncOverlayToImage() {
+                                    const previewImage = document.getElementById('preview-image');
+                                    const imageContainer = document.getElementById('image-container');
+                                    const overlay = document.getElementById('regions-overlay');
+                                    if (!previewImage || !imageContainer || !overlay) return;
+                                    
+                                    const rotation = pageRotations[currentPage] || 0;
+                                    
+                                    // Pastikan overlay tidak "inset:0" lagi, kita tata manual
+                                    overlay.style.right = 'auto';
+                                    overlay.style.bottom = 'auto';
+                                    overlay.style.position = 'absolute';
+                                    overlay.style.pointerEvents = 'auto';
+                                    overlay.style.zIndex = '2';
+                                    
+                                    // Ukuran overlay = ukuran gambar SEBELUM transform (layout width/height)
+                                    const imgW = previewImage.clientWidth;
+                                    const imgH = previewImage.clientHeight;
+                                    
+                                    // Centering overlay tepat di atas gambar
+                                    const contW = imageContainer.clientWidth;
+                                    const contH = imageContainer.clientHeight;
+                                    const left = (contW - imgW) / 2;
+                                    const top = (contH - imgH) / 2;
+                                    
+                                    overlay.style.width = imgW + 'px';
+                                    overlay.style.height = imgH + 'px';
+                                    overlay.style.left = left + 'px';
+                                    overlay.style.top = top + 'px';
+                                    
+                                    // Overlay ikut di-rotate persis seperti gambar
+                                    overlay.style.transformOrigin = 'center center';
+                                    overlay.style.transform = `rotate(${rotation}deg)`;
                                 }
                                 
                                 // Save rotations to server
@@ -306,7 +345,7 @@
                                         <p class="text-gray-600">Loading page {{ $currentPage ?? 1 }} of {{ $ocrResult->page_count ?? 1 }}...</p>
                                     </div>
                                 </div>
-                                <div id="regions-overlay" class="absolute inset-0 pointer-events-none"></div>
+                                <div id="regions-overlay" class="absolute" style="pointer-events:auto;"></div>
                             </div>
                             
                             <script>
@@ -321,11 +360,11 @@
                                         previewImage.style.display = 'block';
                                         
                                         // Apply rotation after image is fully loaded
-                                        setTimeout(() => {
-                                            applyCurrentPageRotation();
-                                        }, 100);
-                                    }
-                                }
+                                setTimeout(() => {
+                                    applyCurrentPageRotation();
+                                    // ADDED: Sync overlay after image load
+                                    syncOverlayToImage();
+                                }, 100);
                                 
                                 // UPDATED: Enhanced rotation function with container adjustment
                                 function adjustContainerForRotation(rotation) {
@@ -673,10 +712,10 @@
                     this.nextPageBtn.addEventListener('click', () => this.nextPage());
                 }
 
-                // Image container events
-                this.imageContainer.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-                this.imageContainer.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-                this.imageContainer.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+                // Image container events - UPDATED: Changed to regionsOverlay
+                this.regionsOverlay.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+                this.regionsOverlay.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                this.regionsOverlay.addEventListener('mouseup', (e) => this.handleMouseUp(e));
 
                 // Image load event
                 this.previewImage.addEventListener('load', () => {
@@ -768,69 +807,62 @@
             }
 
             startDrawing() {
-                this.imageContainer.classList.add('drawing-mode');
+                this.regionsOverlay.classList.add('drawing-mode');
                 this.addRegionBtn.textContent = 'Click & Drag to Select';
                 this.addRegionBtn.disabled = true;
             }
 
             stopDrawing() {
-                this.imageContainer.classList.remove('drawing-mode');
+                this.regionsOverlay.classList.remove('drawing-mode');
                 this.addRegionBtn.textContent = 'Add Region';
                 this.addRegionBtn.disabled = false;
                 this.isDrawing = false;
                 this.drawingRegion = null;
             }
 
-            getAdjustedCoords(x, y) {
-                const rotation = pageRotations?.[this.currentPage] || 0;
-                const img = this.previewImage;
-                if (!img) return { x, y };
-
-                const w = img.clientWidth;
-                const h = img.clientHeight;
-
-                switch (rotation) {
-                    case 90:
-                        // rotasi 90 derajat searah jarum jam
-                        return { x: h - y, y: x };
-                    case 180:
-                        return { x: w - x, y: h - y };
-                    case 270:
-                        // rotasi 270 derajat searah jarum jam
-                        return { x: y, y: w - x };
-                    default:
-                        return { x, y };
-                }
+            // ADDED: Helper function to convert mouse event coordinates to local overlay coordinates
+            localPointFromEvent(e) {
+                const el = this.regionsOverlay; // elemen overlay yang ikut di-rotate
+                const rect = el.getBoundingClientRect(); // bounding SETELAH transform
+                const style = window.getComputedStyle(el);
+                const transform = style.transform === 'none' ? '' : style.transform;
+                
+                // CSS menerapkan: T = translate(origin) * M * translate(-origin)
+                const [oxStr, oyStr] = style.transformOrigin.split(' ');
+                const ox = parseFloat(oxStr);
+                const oy = parseFloat(oyStr);
+                
+                const M = new DOMMatrix(transform || undefined);
+                const T = new DOMMatrix().translate(ox, oy).multiply(M).translate(-ox, -oy);
+                const invT = T.inverse();
+                
+                // titik pointer dalam koordinat border-box overlay (post-layout)
+                const p = new DOMPoint(e.clientX - rect.left, e.clientY - rect.top);
+                // balikkan transform ke koordinat LOKAL PRA-ROTASI overlay
+                const local = p.matrixTransform(invT);
+                
+                // clamp ke ukuran gambar (pra-rotasi)
+                const w = this.previewImage.clientWidth;
+                const h = this.previewImage.clientHeight;
+                
+                return {
+                    x: Math.max(0, Math.min(local.x, w)),
+                    y: Math.max(0, Math.min(local.y, h))
+                };
             }
 
             handleMouseDown(e) {
-                if (!this.imageContainer.classList.contains('drawing-mode')) return;
-
-                const containerRect = this.imageContainer.getBoundingClientRect();
-                const imageRect = this.previewImage.getBoundingClientRect();
-
-                // posisi klik relatif terhadap container
-                const x = e.clientX - containerRect.left;
-                const y = e.clientY - containerRect.top;
-
-                // batas gambar
-                const imgLeft = (containerRect.width - imageRect.width) / 2;
-                const imgTop = (containerRect.height - imageRect.height) / 2;
-                const imgRight = imgLeft + imageRect.width;
-                const imgBottom = imgTop + imageRect.height;
-
-                // abaikan klik di luar area gambar
-                if (x < imgLeft || x > imgRight || y < imgTop || y > imgBottom) return;
-
-                // kompensasi rotasi gambar
-                const adj = this.getAdjustedCoords(x - imgLeft, y - imgTop);
-
+                if (!this.regionsOverlay.classList.contains('drawing-mode')) return;
+                
+                // UPDATED: Use local overlay coordinates instead of complex image bounds calculation
+                const localPoint = this.localPointFromEvent(e);
+                
                 this.isDrawing = true;
                 this.drawingRegion = {
-                    startX: adj.x,
-                    startY: adj.y,
-                    currentX: adj.x,
-                    currentY: adj.y,
+                    startX: localPoint.x,
+                    startY: localPoint.y,
+                    currentX: localPoint.x,
+                    currentY: localPoint.y,
                     page: this.currentPage
                 };
 
@@ -840,23 +872,11 @@
             handleMouseMove(e) {
                 if (!this.isDrawing || !this.drawingRegion) return;
 
-                const containerRect = this.imageContainer.getBoundingClientRect();
-                const imageRect = this.previewImage.getBoundingClientRect();
-                const imgLeft = (containerRect.width - imageRect.width) / 2;
-                const imgTop = (containerRect.height - imageRect.height) / 2;
+                // UPDATED: Use local overlay coordinates instead of complex image bounds calculation
+                const localPoint = this.localPointFromEvent(e);
 
-                let x = e.clientX - containerRect.left;
-                let y = e.clientY - containerRect.top;
-
-                // pastikan koordinat masih dalam area gambar
-                x = Math.max(imgLeft, Math.min(x, imgLeft + imageRect.width));
-                y = Math.max(imgTop, Math.min(y, imgTop + imageRect.height));
-
-                // kompensasi rotasi
-                const adj = this.getAdjustedCoords(x - imgLeft, y - imgTop);
-
-                this.drawingRegion.currentX = adj.x;
-                this.drawingRegion.currentY = adj.y;
+                this.drawingRegion.currentX = localPoint.x;
+                this.drawingRegion.currentY = localPoint.y;
 
                 this.updateDrawingPreview();
             }
@@ -914,8 +934,8 @@
                     id: this.nextRegionId++,
                     x: left,
                     y: top,
-                    width,
-                    height,
+                    width: width,
+                    height: height,
                     page: drawingData.page
                 };
 
@@ -1406,168 +1426,3 @@
     </script>
 </body>
 </html>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Tambahkan variabel untuk rotasi
-        let pageRotations = {!! json_encode($ocrResult->page_rotations ?? []) !!};
-        
-        // Inisialisasi rotasi halaman jika belum diatur
-        if (!pageRotations || Object.keys(pageRotations).length === 0) {
-            pageRotations = {};
-            for (let i = 1; i <= totalPages; i++) {
-                pageRotations[i] = 0;
-            }
-        }
-        
-        // Tambahkan event listener untuk tombol rotasi
-        const rotateLeftBtn = document.getElementById('rotate-left-btn');
-        const rotateRightBtn = document.getElementById('rotate-right-btn');
-        
-        if (rotateLeftBtn) {
-            rotateLeftBtn.addEventListener('click', function() {
-                rotateImage(-90);
-            });
-        }
-        
-        if (rotateRightBtn) {
-            rotateRightBtn.addEventListener('click', function() {
-                rotateImage(90);
-            });
-        }
-        
-        // Fungsi untuk merotasi gambar
-        function rotateImage(degrees) {
-            // Dapatkan rotasi saat ini untuk halaman ini
-            const currentRotation = pageRotations[currentPage] || 0;
-            // Hitung rotasi baru (0, 90, 180, 270)
-            let newRotation = (currentRotation + degrees) % 360;
-            if (newRotation < 0) newRotation += 360;
-            
-            // Simpan rotasi baru
-            pageRotations[currentPage] = newRotation;
-            
-            // Terapkan rotasi ke gambar
-            applyRotation();
-            
-            // Simpan rotasi ke server
-            saveRotation();
-        }
-        
-        // Fungsi untuk menerapkan rotasi ke gambar
-        function applyRotation() {
-            const rotation = pageRotations[currentPage] || 0;
-            const imageContainer = document.getElementById('image-container');
-            
-            // Simpan dimensi asli gambar
-            const originalWidth = previewImage.naturalWidth;
-            const originalHeight = previewImage.naturalHeight;
-            const containerWidth = imageContainer.offsetWidth;
-            const containerHeight = imageContainer.offsetHeight;
-            
-            // Reset semua style terlebih dahulu
-            imageContainer.style.overflow = 'visible';
-            imageContainer.style.display = 'flex';
-            imageContainer.style.alignItems = 'center';
-            imageContainer.style.justifyContent = 'center';
-            
-            // Reset gambar ke kondisi awal
-            previewImage.style.maxWidth = '';
-            previewImage.style.maxHeight = '';
-            previewImage.style.width = '';
-            previewImage.style.height = '';
-            previewImage.style.margin = 'auto';
-            previewImage.style.transformOrigin = 'center center';
-            
-            if (rotation === 90 || rotation === 270) {
-                // Untuk rotasi landscape (90° atau 270°)
-                
-                // Hitung dimensi yang diperlukan setelah rotasi
-                const rotatedWidth = originalHeight;
-                const rotatedHeight = originalWidth;
-                
-                // Hitung skala yang diperlukan agar gambar muat dalam container
-                const scaleX = containerWidth / rotatedWidth;
-                const scaleY = containerHeight / rotatedHeight;
-                const scale = Math.min(scaleX, scaleY, 0.9); // Maksimal 90% dari container
-                
-                // Atur container untuk menampung gambar landscape
-                imageContainer.style.height = Math.max(containerHeight, rotatedHeight * scale + 50) + 'px';
-                imageContainer.style.minHeight = '500px';
-                
-                // Atur gambar dengan skala yang tepat
-                previewImage.style.width = (originalWidth * scale) + 'px';
-                previewImage.style.height = (originalHeight * scale) + 'px';
-                previewImage.style.maxWidth = 'none';
-                previewImage.style.maxHeight = 'none';
-                previewImage.style.transform = `rotate(${rotation}deg) scale(1)`;
-                previewImage.style.display = 'block';
-                
-            } else {
-                // Untuk rotasi portrait (0° atau 180°)
-                
-                // Hitung skala yang diperlukan
-                const scaleX = containerWidth / originalWidth;
-                const scaleY = containerHeight / originalHeight;
-                const scale = Math.min(scaleX, scaleY, 1); // Maksimal ukuran asli
-                
-                imageContainer.style.height = 'auto';
-                imageContainer.style.minHeight = 'auto';
-                
-                // Atur gambar untuk portrait
-                if (scale < 1) {
-                    previewImage.style.width = (originalWidth * scale) + 'px';
-                    previewImage.style.height = (originalHeight * scale) + 'px';
-                } else {
-                    previewImage.style.maxWidth = '100%';
-                    previewImage.style.height = 'auto';
-                }
-                
-                previewImage.style.transform = `rotate(${rotation}deg)`;
-                previewImage.style.display = 'block';
-            }
-            
-            // Perbarui tampilan region jika ada
-            if (typeof updateRegionsDisplay === 'function') {
-                setTimeout(updateRegionsDisplay, 150);
-            }
-        }
-        
-        // Fungsi untuk menyimpan rotasi ke server
-        function saveRotation() {
-            fetch(`/ocr/{{ $ocrResult->id }}/save-rotations`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                },
-                body: JSON.stringify({
-                    page_rotations: pageRotations
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Rotation saved:', data);
-            })
-            .catch(error => {
-                console.error('Error saving rotation:', error);
-            });
-        }
-        
-        // Modifikasi fungsi loadCurrentPage untuk menerapkan rotasi
-        const originalLoadCurrentPage = loadCurrentPage;
-        loadCurrentPage = function() {
-            originalLoadCurrentPage.call(this);
-            // Terapkan rotasi setelah gambar dimuat
-            previewImage.onload = function() {
-                loadingPlaceholder.style.display = 'none';
-                previewImage.style.display = 'block';
-                applyRotation();
-                updateRegionsDisplay();
-            };
-        };
-        
-        // Update process button state based on total regions
-        this.updateProcessButton();
-    });
-</script>
