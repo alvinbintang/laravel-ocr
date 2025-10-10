@@ -634,6 +634,26 @@
                 this.loadExistingRegions();
             }
 
+            // ADDED: Helper function to adjust coordinates based on rotation
+            getAdjustedCoords(x, y) {
+                const rotation = pageRotations[this.currentPage] || 0;
+                const img = this.previewImage;
+
+                const imgWidth = img.clientWidth;
+                const imgHeight = img.clientHeight;
+
+                switch (rotation) {
+                    case 90:
+                        return { x: y, y: imgWidth - x };
+                    case 180:
+                        return { x: imgWidth - x, y: imgHeight - y };
+                    case 270:
+                        return { x: imgHeight - y, y: x };
+                    default:
+                        return { x, y };
+                }
+            }
+
             initializeElements() {
                 this.imageContainer = document.getElementById('image-container');
                 this.previewImage = document.getElementById('preview-image');
@@ -803,12 +823,17 @@
                     return; // Click is on gray background, ignore
                 }
 
+                // ADDED: Adjust coordinates based on rotation
+                const adjusted = this.getAdjustedCoords(x, y);
+                const adjX = adjusted.x;
+                const adjY = adjusted.y;
+
                 this.isDrawing = true;
                 this.drawingRegion = {
-                    startX: x,
-                    startY: y,
-                    currentX: x,
-                    currentY: y,
+                    startX: adjX,
+                    startY: adjY,
+                    currentX: adjX,
+                    currentY: adjY,
                     page: this.currentPage
                 };
 
@@ -835,8 +860,13 @@
                 x = Math.max(imageLeft, Math.min(x, imageRight));
                 y = Math.max(imageTop, Math.min(y, imageBottom));
 
-                this.drawingRegion.currentX = x;
-                this.drawingRegion.currentY = y;
+                // ADDED: Adjust coordinates based on rotation
+                const adjusted = this.getAdjustedCoords(x, y);
+                const adjX = adjusted.x;
+                const adjY = adjusted.y;
+
+                this.drawingRegion.currentX = adjX;
+                this.drawingRegion.currentY = adjY;
 
                 this.updateDrawingPreview();
             }
