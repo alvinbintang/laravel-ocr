@@ -634,26 +634,6 @@
                 this.loadExistingRegions();
             }
 
-            // ADDED: Helper function to adjust coordinates based on rotation
-            getAdjustedCoords(x, y) {
-                const rotation = pageRotations[this.currentPage] || 0;
-                const img = this.previewImage;
-
-                const imgWidth = img.clientWidth;
-                const imgHeight = img.clientHeight;
-
-                switch (rotation) {
-                    case 90:
-                        return { x: y, y: imgWidth - x };
-                    case 180:
-                        return { x: imgWidth - x, y: imgHeight - y };
-                    case 270:
-                        return { x: imgHeight - y, y: x };
-                    default:
-                        return { x, y };
-                }
-            }
-
             initializeElements() {
                 this.imageContainer = document.getElementById('image-container');
                 this.previewImage = document.getElementById('preview-image');
@@ -801,39 +781,56 @@
                 this.drawingRegion = null;
             }
 
+            getAdjustedCoords(x, y) {
+                const rotation = pageRotations?.[this.currentPage] || 0;
+                const img = this.previewImage;
+                if (!img) return { x, y };
+
+                const w = img.clientWidth;
+                const h = img.clientHeight;
+
+                switch (rotation) {
+                    case 90:
+                        // rotasi 90 derajat searah jarum jam
+                        return { x: h - y, y: x };
+                    case 180:
+                        return { x: w - x, y: h - y };
+                    case 270:
+                        // rotasi 270 derajat searah jarum jam
+                        return { x: y, y: w - x };
+                    default:
+                        return { x, y };
+                }
+            }
+
             handleMouseDown(e) {
                 if (!this.imageContainer.classList.contains('drawing-mode')) return;
-                
-                // Check if click is within the image bounds (not on gray background)
-                const imageRect = this.previewImage.getBoundingClientRect();
+
                 const containerRect = this.imageContainer.getBoundingClientRect();
-                
-                // Calculate relative position within the container
+                const imageRect = this.previewImage.getBoundingClientRect();
+
+                // posisi klik relatif terhadap container
                 const x = e.clientX - containerRect.left;
                 const y = e.clientY - containerRect.top;
-                
-                // Check if the click is within the actual image bounds
-                const imageLeft = (containerRect.width - imageRect.width) / 2;
-                const imageTop = (containerRect.height - imageRect.height) / 2;
-                const imageRight = imageLeft + imageRect.width;
-                const imageBottom = imageTop + imageRect.height;
-                
-                // Only allow region selection within the actual image area
-                if (x < imageLeft || x > imageRight || y < imageTop || y > imageBottom) {
-                    return; // Click is on gray background, ignore
-                }
 
-                // ADDED: Adjust coordinates based on rotation
-                const adjusted = this.getAdjustedCoords(x, y);
-                const adjX = adjusted.x;
-                const adjY = adjusted.y;
+                // batas gambar
+                const imgLeft = (containerRect.width - imageRect.width) / 2;
+                const imgTop = (containerRect.height - imageRect.height) / 2;
+                const imgRight = imgLeft + imageRect.width;
+                const imgBottom = imgTop + imageRect.height;
+
+                // abaikan klik di luar area gambar
+                if (x < imgLeft || x > imgRight || y < imgTop || y > imgBottom) return;
+
+                // kompensasi rotasi gambar
+                const adj = this.getAdjustedCoords(x - imgLeft, y - imgTop);
 
                 this.isDrawing = true;
                 this.drawingRegion = {
-                    startX: adjX,
-                    startY: adjY,
-                    currentX: adjX,
-                    currentY: adjY,
+                    startX: adj.x,
+                    startY: adj.y,
+                    currentX: adj.x,
+                    currentY: adj.y,
                     page: this.currentPage
                 };
 
@@ -843,30 +840,23 @@
             handleMouseMove(e) {
                 if (!this.isDrawing || !this.drawingRegion) return;
 
-                // Get image and container bounds to constrain drawing within image area
-                const imageRect = this.previewImage.getBoundingClientRect();
                 const containerRect = this.imageContainer.getBoundingClientRect();
-                
+                const imageRect = this.previewImage.getBoundingClientRect();
+                const imgLeft = (containerRect.width - imageRect.width) / 2;
+                const imgTop = (containerRect.height - imageRect.height) / 2;
+
                 let x = e.clientX - containerRect.left;
                 let y = e.clientY - containerRect.top;
-                
-                // Calculate image boundaries within container
-                const imageLeft = (containerRect.width - imageRect.width) / 2;
-                const imageTop = (containerRect.height - imageRect.height) / 2;
-                const imageRight = imageLeft + imageRect.width;
-                const imageBottom = imageTop + imageRect.height;
-                
-                // Constrain coordinates to image boundaries
-                x = Math.max(imageLeft, Math.min(x, imageRight));
-                y = Math.max(imageTop, Math.min(y, imageBottom));
 
-                // ADDED: Adjust coordinates based on rotation
-                const adjusted = this.getAdjustedCoords(x, y);
-                const adjX = adjusted.x;
-                const adjY = adjusted.y;
+                // pastikan koordinat masih dalam area gambar
+                x = Math.max(imgLeft, Math.min(x, imgLeft + imageRect.width));
+                y = Math.max(imgTop, Math.min(y, imgTop + imageRect.height));
 
-                this.drawingRegion.currentX = adjX;
-                this.drawingRegion.currentY = adjY;
+                // kompensasi rotasi
+                const adj = this.getAdjustedCoords(x - imgLeft, y - imgTop);
+
+                this.drawingRegion.currentX = adj.x;
+                this.drawingRegion.currentY = adj.y;
 
                 this.updateDrawingPreview();
             }
@@ -924,8 +914,8 @@
                     id: this.nextRegionId++,
                     x: left,
                     y: top,
-                    width: width,
-                    height: height,
+                    width,
+                    height,
                     page: drawingData.page
                 };
 
