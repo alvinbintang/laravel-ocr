@@ -106,7 +106,11 @@ class OcrController extends Controller
      */
     public function confirmCrop(int $id)
     {
+        \Log::info('ConfirmCrop called for ID: ' . $id);
+        
         $result = $this->ocrService->confirmCrop($id);
+        
+        \Log::info('ConfirmCrop result: ', $result);
         
         return response()->json($result);
     }

@@ -385,9 +385,18 @@ class OcrService
     public function confirmCrop(int $id): array
     {
         try {
+            \Log::info('OcrService confirmCrop started for ID: ' . $id);
+            
             $ocrResult = $this->ocrResultRepository->findById($id);
             
+            \Log::info('OCR Result found: ', [
+                'id' => $ocrResult->id,
+                'status' => $ocrResult->status,
+                'cropped_images_count' => count($ocrResult->cropped_images ?? [])
+            ]);
+            
             if ($ocrResult->status !== 'awaiting_confirmation') {
+                \Log::warning('Cannot confirm crop - wrong status: ' . $ocrResult->status);
                 return [
                     'success' => false,
                     'message' => 'Cannot confirm crop at this stage',
@@ -397,14 +406,19 @@ class OcrService
 
             // Update status to processing for OCR
             $this->ocrResultRepository->updateStatus($id, 'processing');
+            \Log::info('Status updated to processing');
 
             // Get cropped images and process them with OCR
             $croppedImages = $ocrResult->cropped_images ?? [];
+            \Log::info('Cropped images found: ' . count($croppedImages));
             
             // Group cropped images by page for OCR processing
             $imagesByPage = collect($croppedImages)->groupBy('page')->toArray();
+            \Log::info('Images grouped by page: ', array_keys($imagesByPage));
             
             foreach ($imagesByPage as $page => $pageImages) {
+                \Log::info('Processing page: ' . $page . ' with ' . count($pageImages) . ' images');
+                
                 // Convert cropped images back to region format for ProcessRegions job
                 $regions = [];
                 foreach ($pageImages as $image) {
@@ -418,13 +432,20 @@ class OcrService
                     ];
                 }
                 
+                \Log::info('Regions prepared for page ' . $page . ': ', $regions);
+                
                 // Get page rotation
                 $pageRotations = json_decode($ocrResult->page_rotations ?? '[]', true);
                 $pageRotation = isset($pageRotations[$page]) ? (int)$pageRotations[$page] : 0;
                 
+                \Log::info('Page rotation for page ' . $page . ': ' . $pageRotation);
+                
                 // Dispatch OCR processing job
+                \Log::info('Dispatching ProcessRegions job for page: ' . $page);
                 ProcessRegions::dispatch($id, $regions, (int)$page, null, $pageRotation);
             }
+
+            \Log::info('All ProcessRegions jobs dispatched successfully');
 
             return [
                 'success' => true,
@@ -432,6 +453,10 @@ class OcrService
                 'status' => 'processing'
             ];
         } catch (\Exception $e) {
+            \Log::error('Error in confirmCrop: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return [
                 'success' => false,
                 'message' => 'Error confirming crop: ' . $e->getMessage(),
