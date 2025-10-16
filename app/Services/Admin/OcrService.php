@@ -362,22 +362,13 @@ class OcrService
                 ];
             }
 
-            // Create rotated directory if it doesn't exist - UPDATED: More robust approach
-            $rotatedDir = "ocr_results/{$id}/rotated";
+            // Create rotated directory if it doesn't exist - UPDATED: Use same approach as ProcessOcr
+            $rotatedDir = "ocr/images/{$id}/rotated";
+            $rotatedDirPath = Storage::disk('public')->path($rotatedDir);
             
-            // UPDATED: Use Storage::makeDirectory for consistent Laravel approach
-            try {
-                if (!Storage::disk('public')->exists($rotatedDir)) {
-                    Storage::disk('public')->makeDirectory($rotatedDir);
-                }
-            } catch (\Exception $dirException) {
-                // ADDED: Fallback to mkdir if Storage::makeDirectory fails
-                $rotatedDirPath = Storage::disk('public')->path($rotatedDir);
-                if (!file_exists($rotatedDirPath)) {
-                    if (!mkdir($rotatedDirPath, 0755, true)) {
-                        throw new \Exception("Failed to create directory: {$rotatedDir}");
-                    }
-                }
+            // UPDATED: Use direct mkdir approach like ProcessOcr.php for consistency
+            if (!file_exists($rotatedDirPath)) {
+                mkdir($rotatedDirPath, 0755, true);
             }
 
             // Generate rotated image filename - UPDATED: Better path handling
@@ -394,11 +385,6 @@ class OcrService
             
             // UPDATED: Save the rotated image with better error handling
             try {
-                // ADDED: Ensure directory exists before saving
-                if (!Storage::disk('public')->exists($rotatedDir)) {
-                    throw new \Exception("Directory does not exist: {$rotatedDir}");
-                }
-                
                 // UPDATED: Use correct Intervention Image encoding for Laravel
                 $fullRotatedPath = Storage::disk('public')->path($rotatedImagePath);
                 $image->save($fullRotatedPath, 90, 'png');
@@ -418,9 +404,10 @@ class OcrService
                 Log::error('Failed to save rotated image', [
                     'error' => $saveException->getMessage(),
                     'path' => $rotatedImagePath,
-                    'directory_exists' => Storage::disk('public')->exists($rotatedDir),
-                    'directory_path' => Storage::disk('public')->path($rotatedDir),
-                    'directory_writable' => is_writable(Storage::disk('public')->path($rotatedDir))
+                    'full_path' => $fullRotatedPath ?? 'N/A',
+                    'directory_exists' => file_exists($rotatedDirPath),
+                    'directory_path' => $rotatedDirPath,
+                    'directory_writable' => is_writable($rotatedDirPath)
                 ]);
                 throw new \Exception("Error applying rotation: " . $saveException->getMessage());
             }
