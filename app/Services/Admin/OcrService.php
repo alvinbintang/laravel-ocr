@@ -365,8 +365,10 @@ class OcrService
             // Create rotated directory if it doesn't exist
             $rotatedDir = "ocr_results/{$id}/rotated";
             $rotatedDirPath = storage_path('app/public/' . $rotatedDir);
-            if (!is_dir($rotatedDirPath)) {
-                mkdir($rotatedDirPath, 0755, true);
+            
+            // Use Laravel Storage to ensure proper directory creation with correct permissions
+            if (!Storage::disk('public')->exists("ocr_results/{$id}/rotated")) {
+                Storage::disk('public')->makeDirectory("ocr_results/{$id}/rotated");
             }
 
             // Generate rotated image filename

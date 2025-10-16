@@ -18,7 +18,10 @@
                     <p class="text-sm text-gray-500">Langkah 1: Preview dan Rotasi Gambar</p>
                 </div>
                 <div class="flex space-x-3">
-                    <a href="{{ route('ocr.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors">
+                    <a href="{{ route('ocr.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                        </svg>
                         Kembali
                     </a>
                 </div>
@@ -32,13 +35,44 @@
                 <div class="bg-white rounded-lg shadow-md p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold text-gray-800">Preview Gambar</h2>
-                        <div class="flex items-center space-x-2">
-                            <span class="text-sm text-gray-600">Halaman:</span>
-                            <select id="page-selector" class="border border-gray-300 rounded px-3 py-1 text-sm">
-                                @foreach($ocrResult->images as $index => $image)
-                                    <option value="{{ $index }}">{{ $index + 1 }}</option>
-                                @endforeach
-                            </select>
+                        <div class="flex items-center space-x-4">
+                            <!-- Page Counter -->
+                            <div class="flex items-center space-x-2">
+                                <span class="text-sm text-gray-600">Pages ({{ count($ocrResult->images) }} total)</span>
+                                <select id="page-selector" class="border border-gray-300 rounded px-3 py-1 text-sm">
+                                    @foreach($ocrResult->images as $index => $image)
+                                        <option value="{{ $index }}">{{ $index + 1 }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            
+                            <!-- Rotation Controls -->
+                            <div class="flex items-center space-x-2">
+                                <button id="rotate-left" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z"></path>
+                                    </svg>
+                                    Rotate Left
+                                </button>
+                                <button id="rotate-right" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M21 12l-6.414 6.414a2 2 0 01-1.414.586H5a2 2 0 01-2-2V7a2 2 0 012-2h8.172a2 2 0 011.414.586L21 12z"></path>
+                                    </svg>
+                                    Rotate Right
+                                </button>
+                                <button id="apply-rotation" class="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm" style="display: none;">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    Apply
+                                </button>
+                                <button id="reset-rotation" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm" style="display: none;">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                    </svg>
+                                    Reset
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -52,36 +86,14 @@
                              style="display: block;">
                     </div>
 
-                    <!-- Rotation Controls -->
-                    <div class="bg-gray-50 rounded-lg p-4">
-                        <h3 class="text-lg font-medium text-gray-800 mb-3">Kontrol Rotasi</h3>
-                        <div class="flex flex-wrap items-center gap-3">
-                            <button id="rotate-left" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z"></path>
-                                </svg>
-                                Putar Kiri
-                            </button>
-                            <button id="rotate-right" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M21 12l-6.414 6.414a2 2 0 01-1.414.586H5a2 2 0 01-2-2V7a2 2 0 012-2h8.172a2 2 0 011.414.586L21 12z"></path>
-                                </svg>
-                                Putar Kanan
-                            </button>
-                            <button id="apply-rotation" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center" style="display: none;">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                </svg>
-                                Terapkan Rotasi
-                            </button>
-                            <button id="reset-rotation" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center" style="display: none;">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                                </svg>
-                                Reset
-                            </button>
+                    <!-- Rotation Status -->
+                    <div id="rotation-status" class="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200" style="display: none;">
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span class="text-sm text-blue-800" id="rotation-status-text"></span>
                         </div>
-                        <div id="rotation-status" class="mt-2 text-sm text-gray-600"></div>
                     </div>
                 </div>
             </div>
@@ -108,7 +120,10 @@
                         <p class="text-sm text-gray-600">
                             Setelah selesai merotasi gambar (jika diperlukan), Anda dapat melanjutkan ke tahap pemilihan area untuk OCR.
                         </p>
-                        <button id="continue-to-multiselect" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg transition-colors font-medium">
+                        <button id="continue-to-multiselect" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg transition-colors font-medium flex items-center justify-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                            </svg>
                             Lanjut ke Multi-Select
                         </button>
                     </div>
