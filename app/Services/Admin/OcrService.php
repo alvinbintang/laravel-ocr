@@ -371,9 +371,11 @@ class OcrService
                 mkdir($rotatedDirPath, 0755, true);
             }
 
-            // Generate rotated image filename
+            // Generate rotated image filename - fix the naming issue
             $pathInfo = pathinfo($originalImagePath);
-            $rotatedImageName = $pathInfo['filename'] . "_page_{$pageNumber}_rotated_{$rotationDegree}deg." . $pathInfo['extension'];
+            // Fix: Use proper filename format that matches the original naming pattern
+            $originalFileName = $pathInfo['filename']; // e.g., "page-000"
+            $rotatedImageName = $originalFileName . "_rotated_{$rotationDegree}deg." . $pathInfo['extension'];
             $rotatedImagePath = $rotatedDir . '/' . $rotatedImageName;
 
             // Load and rotate the image using Intervention Image
@@ -383,7 +385,30 @@ class OcrService
             $image->rotate(-$rotationDegree);
             
             // Save the rotated image using Storage::disk('public')->put() like CropRegions.php
-            Storage::disk('public')->put($rotatedImagePath, $image->encode());
+            try {
+                $encodedImage = $image->encode();
+                Storage::disk('public')->put($rotatedImagePath, $encodedImage);
+                
+                // Verify file was actually saved
+                if (!Storage::disk('public')->exists($rotatedImagePath)) {
+                    throw new \Exception('Failed to save rotated image to storage');
+                }
+                
+                Log::info('Rotated image saved successfully', [
+                    'path' => $rotatedImagePath,
+                    'full_path' => Storage::disk('public')->path($rotatedImagePath),
+                    'file_exists' => Storage::disk('public')->exists($rotatedImagePath)
+                ]);
+                
+            } catch (\Exception $saveException) {
+                Log::error('Failed to save rotated image', [
+                    'error' => $saveException->getMessage(),
+                    'path' => $rotatedImagePath,
+                    'directory_exists' => file_exists($rotatedDirPath),
+                    'directory_writable' => is_writable($rotatedDirPath)
+                ]);
+                throw $saveException;
+            }
 
             // Update the image path in the database for this page
             $updatedImagePaths = $imagePaths;
