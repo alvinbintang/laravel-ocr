@@ -358,4 +358,39 @@ class OcrApiController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Apply rotation to image file
+     * ADDED: New API endpoint for actual image rotation
+     */
+    public function applyRotation(Request $request, $id): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'page_number' => 'required|integer|min:1',
+            'rotation_degree' => 'required|integer|in:0,90,180,270'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $pageNumber = $request->input('page_number');
+            $rotationDegree = $request->input('rotation_degree');
+
+            $result = $this->ocrService->applyRotation($id, $pageNumber, $rotationDegree);
+
+            return response()->json($result);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to apply rotation',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

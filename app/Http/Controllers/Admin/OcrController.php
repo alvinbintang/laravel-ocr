@@ -27,7 +27,7 @@ class OcrController extends Controller
     {
         $result = $this->ocrService->processPdfUpload($request->file('pdf'), $request->input('document_type')); // UPDATED: pass document_type
         
-        return redirect()->route('ocr.preview', ['id' => $result['ocr_result_id']]) // UPDATED: use correct key
+        return redirect()->route('ocr.rka-preview', ['id' => $result['ocr_result_id']]) // UPDATED: redirect to RKA preview instead of old preview
             ->with('success', $result['message']); // UPDATED: use message from result
     }
 
@@ -71,9 +71,14 @@ class OcrController extends Controller
     {
         $regions = $request->input('regions');
         $previewDimensions = $request->input('previewDimensions');
+        // UPDATED: Handle both pageRotations (old) and appliedRotations (new workflow)
         $pageRotations = $request->input('pageRotations', []);
+        $appliedRotations = $request->input('appliedRotations', []);
+        
+        // Use appliedRotations if available, otherwise fall back to pageRotations
+        $rotations = !empty($appliedRotations) ? $appliedRotations : $pageRotations;
 
-        $result = $this->ocrService->cropRegions($id, $regions, $previewDimensions, $pageRotations);
+        $result = $this->ocrService->cropRegions($id, $regions, $previewDimensions, $rotations);
 
         return response()->json($result);
     }
@@ -218,5 +223,56 @@ class OcrController extends Controller
             'success' => $result['success'],
             'message' => $result['message']
         ]);
+    }
+
+    /**
+     * Apply rotation to image file
+     * ADDED: New endpoint for actual image rotation
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function applyRotation(Request $request, int $id)
+    {
+        $request->validate([
+            'page_number' => 'required|integer|min:1',
+            'rotation_degree' => 'required|integer|in:0,90,180,270'
+        ]);
+
+        $pageNumber = $request->input('page_number');
+        $rotationDegree = $request->input('rotation_degree');
+
+        $result = $this->ocrService->applyRotation($id, $pageNumber, $rotationDegree);
+
+        return response()->json($result);
+    }
+
+    // ADDED: New method for RKA preview page
+    public function rkaPreview($id)
+    {
+        $previewData = $this->ocrService->checkPreviewStatus($id);
+        
+        // If still processing or error, redirect to status page
+        if (!$previewData['can_preview']) {
+            return redirect()->route('ocr.status', ['id' => $id])
+                ->with('info', $previewData['message']);
+        }
+
+        return view('ocr.rka-preview', ['ocrResult' => $previewData['ocr_result']]);
+    }
+
+    // ADDED: New method for multiselect page
+    public function multiselect($id)
+    {
+        $previewData = $this->ocrService->checkPreviewStatus($id);
+        
+        // If still processing or error, redirect to status page
+        if (!$previewData['can_preview']) {
+            return redirect()->route('ocr.status', ['id' => $id])
+                ->with('info', $previewData['message']);
+        }
+
+        return view('ocr.multiselect', ['ocrResult' => $previewData['ocr_result']]);
     }
 }

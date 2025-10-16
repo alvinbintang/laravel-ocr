@@ -309,6 +309,118 @@ class OcrService
     }
 
     /**
+     * Apply rotation to image file and return new image URL
+     * ADDED: New method for actual image rotation in backend
+     *
+     * @param int $id
+     * @param int $pageNumber
+     * @param int $rotationDegree
+     * @return array
+     */
+    public function applyRotation(int $id, int $pageNumber, int $rotationDegree): array
+    {
+        try {
+            $ocrResult = $this->ocrResultRepository->findById($id);
+            
+            if (!$ocrResult) {
+                return [
+                    'success' => false,
+                    'message' => 'OCR result not found'
+                ];
+            }
+
+            // Get the original image path for the specific page
+            $imagePaths = $ocrResult->image_paths ?? [];
+            if (!isset($imagePaths[$pageNumber - 1])) {
+                return [
+                    'success' => false,
+                    'message' => "Image not found for page {$pageNumber}"
+                ];
+            }
+
+            $originalImagePath = $imagePaths[$pageNumber - 1];
+            $fullOriginalPath = storage_path('app/public/' . $originalImagePath);
+
+            if (!file_exists($fullOriginalPath)) {
+                return [
+                    'success' => false,
+                    'message' => 'Original image file not found'
+                ];
+            }
+
+            // Normalize rotation degree
+            $rotationDegree = $rotationDegree % 360;
+            if ($rotationDegree < 0) $rotationDegree += 360;
+
+            // If rotation is 0, no need to rotate
+            if ($rotationDegree === 0) {
+                return [
+                    'success' => true,
+                    'message' => 'No rotation needed',
+                    'rotated_image_url' => Storage::url($originalImagePath),
+                    'rotation_applied' => 0
+                ];
+            }
+
+            // Create rotated directory if it doesn't exist
+            $rotatedDir = "ocr_results/{$id}/rotated";
+            $rotatedDirPath = storage_path('app/public/' . $rotatedDir);
+            if (!is_dir($rotatedDirPath)) {
+                mkdir($rotatedDirPath, 0755, true);
+            }
+
+            // Generate rotated image filename
+            $pathInfo = pathinfo($originalImagePath);
+            $rotatedImageName = $pathInfo['filename'] . "_page_{$pageNumber}_rotated_{$rotationDegree}deg." . $pathInfo['extension'];
+            $rotatedImagePath = $rotatedDir . '/' . $rotatedImageName;
+            $fullRotatedPath = storage_path('app/public/' . $rotatedImagePath);
+
+            // Load and rotate the image using Intervention Image
+            $image = \Intervention\Image\Laravel\Facades\Image::read($fullOriginalPath);
+            
+            // Apply rotation (negative because Intervention Image rotates counter-clockwise)
+            $image->rotate(-$rotationDegree);
+            
+            // Save the rotated image
+            $image->save($fullRotatedPath);
+
+            // Update the image path in the database for this page
+            $updatedImagePaths = $imagePaths;
+            $updatedImagePaths[$pageNumber - 1] = $rotatedImagePath;
+
+            // Also update page rotations to reflect the applied rotation
+            $currentRotations = $ocrResult->page_rotations ?? [];
+            $currentRotations[$pageNumber] = $rotationDegree;
+
+            $this->ocrResultRepository->update($id, [
+                'image_paths' => $updatedImagePaths,
+                'page_rotations' => $currentRotations
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Image rotated successfully',
+                'rotated_image_url' => Storage::url($rotatedImagePath),
+                'rotation_applied' => $rotationDegree,
+                'page_number' => $pageNumber
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error applying rotation: ' . $e->getMessage(), [
+                'ocr_result_id' => $id,
+                'page_number' => $pageNumber,
+                'rotation_degree' => $rotationDegree,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return [
+                'success' => false,
+                'message' => 'Error applying rotation: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
      * Crop regions only (without OCR processing)
      *
      * @param int $id

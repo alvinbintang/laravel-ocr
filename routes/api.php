@@ -56,5 +56,8 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Save rotations
         Route::post('/{id}/save-rotations', [OcrApiController::class, 'saveRotations']);
+        
+        // Apply rotation - ADDED: New API route for actual image rotation
+        Route::post('/{id}/apply-rotation', [OcrApiController::class, 'applyRotation']);
     });
 });

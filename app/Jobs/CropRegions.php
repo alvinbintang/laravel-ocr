@@ -55,12 +55,14 @@ class CropRegions implements ShouldQueue
 
             $image = Image::read($imagePath);
             
+            // Get rotation for this page - use 0 if no rotation (for backend-rotated images)
             $rotation = $this->pageRotation ?? 0;
             
-            \Log::info("Processing image for cropping", [
+            // UPDATED: For backend-rotated images, coordinates are already correct, no transformation needed
+            \Log::info("Processing crop regions", [
                 'page' => $this->currentPage,
-                'rotation_parameter' => $rotation,
-                'ocr_result_id' => $this->ocrResultId
+                'rotation' => $rotation,
+                'note' => $rotation > 0 ? 'Frontend coordinates from rotated view' : 'Backend image already rotated, coordinates correct'
             ]);
 
             // Get actual image dimensions for coordinate scaling
@@ -68,7 +70,8 @@ class CropRegions implements ShouldQueue
             $imageHeight = $image->height();
 
             foreach ($this->regions as $region) {
-                // Transform coordinates from rotated view if needed
+                // UPDATED: Only transform coordinates if rotation > 0 (old workflow with visual rotation)
+                // For backend-rotated images (new workflow), coordinates are already correct
                 if ($rotation > 0) {
                     $transformedRegion = $this->transformCoordinatesFromRotatedView($region, $rotation);
                 } else {
@@ -81,7 +84,8 @@ class CropRegions implements ShouldQueue
                 // Crop the region from the image
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
                 
-                // Apply rotation to cropped image to match frontend display
+                // UPDATED: Only apply rotation to cropped image if rotation > 0 (old workflow)
+                // For backend-rotated images, no additional rotation needed
                 if ($rotation > 0) {
                     $croppedImage->rotate(-$rotation);
                     \Log::info("Applied rotation to cropped image", [
@@ -95,24 +99,23 @@ class CropRegions implements ShouldQueue
                 // Save cropped image
                 $croppedImageName = "cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
                 $croppedImagePath = "ocr_results/{$this->ocrResultId}/cropped/{$croppedImageName}";
-                $croppedImageFullPath = Storage::disk('public')->path($croppedImagePath);
                 
                 // Ensure directory exists
-                $croppedImageDir = dirname($croppedImageFullPath);
-                if (!is_dir($croppedImageDir)) {
-                    mkdir($croppedImageDir, 0755, true);
-                }
+                Storage::disk('public')->makeDirectory(dirname($croppedImagePath));
                 
-                // Save cropped image
-                $croppedImage->save($croppedImageFullPath);
+                // Save the cropped image
+                Storage::disk('public')->put($croppedImagePath, $croppedImage->encode());
                 
-                // Store cropped image info
                 $croppedImages[] = [
                     'region_id' => $region['id'],
                     'page' => $this->currentPage,
-                    'path' => $croppedImagePath,
-                    'coordinates' => $scaledRegion,
-                    'url' => Storage::url($croppedImagePath)
+                    'image_path' => $croppedImagePath,
+                    'coordinates' => [
+                        'x' => $scaledRegion['x'],
+                        'y' => $scaledRegion['y'],
+                        'width' => $scaledRegion['width'],
+                        'height' => $scaledRegion['height']
+                    ]
                 ];
             }
 
