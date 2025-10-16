@@ -362,18 +362,26 @@ class OcrService
                 ];
             }
 
-            // Create rotated directory if it doesn't exist - using same approach as ProcessOcr.php
+            // Create rotated directory if it doesn't exist - UPDATED: More robust approach
             $rotatedDir = "ocr_results/{$id}/rotated";
-            $rotatedDirPath = Storage::disk('public')->path($rotatedDir);
             
-            // Create directory using mkdir with proper permissions (same as ProcessOcr.php)
-            if (!file_exists($rotatedDirPath)) {
-                mkdir($rotatedDirPath, 0755, true);
+            // UPDATED: Use Storage::makeDirectory for consistent Laravel approach
+            try {
+                if (!Storage::disk('public')->exists($rotatedDir)) {
+                    Storage::disk('public')->makeDirectory($rotatedDir);
+                }
+            } catch (\Exception $dirException) {
+                // ADDED: Fallback to mkdir if Storage::makeDirectory fails
+                $rotatedDirPath = Storage::disk('public')->path($rotatedDir);
+                if (!file_exists($rotatedDirPath)) {
+                    if (!mkdir($rotatedDirPath, 0755, true)) {
+                        throw new \Exception("Failed to create directory: {$rotatedDir}");
+                    }
+                }
             }
 
-            // Generate rotated image filename - fix the naming issue
+            // Generate rotated image filename - UPDATED: Better path handling
             $pathInfo = pathinfo($originalImagePath);
-            // Fix: Use proper filename format that matches the original naming pattern
             $originalFileName = $pathInfo['filename']; // e.g., "page-000"
             $rotatedImageName = $originalFileName . "_rotated_{$rotationDegree}deg." . $pathInfo['extension'];
             $rotatedImagePath = $rotatedDir . '/' . $rotatedImageName;
@@ -384,30 +392,41 @@ class OcrService
             // Apply rotation (negative because Intervention Image rotates counter-clockwise)
             $image->rotate(-$rotationDegree);
             
-            // Save the rotated image using Storage::disk('public')->put() like CropRegions.php
+            // UPDATED: Save the rotated image with better error handling
             try {
-                $encodedImage = $image->encode();
-                Storage::disk('public')->put($rotatedImagePath, $encodedImage);
+                // ADDED: Ensure directory exists before saving
+                if (!Storage::disk('public')->exists($rotatedDir)) {
+                    throw new \Exception("Directory does not exist: {$rotatedDir}");
+                }
+                
+                // UPDATED: Use different encoding approach for better compatibility
+                $encodedImage = $image->encode('png', 90);
+                $saveResult = Storage::disk('public')->put($rotatedImagePath, $encodedImage);
+                
+                if (!$saveResult) {
+                    throw new \Exception('Storage::put returned false');
+                }
                 
                 // Verify file was actually saved
                 if (!Storage::disk('public')->exists($rotatedImagePath)) {
-                    throw new \Exception('Failed to save rotated image to storage');
+                    throw new \Exception('File verification failed - file does not exist after save');
                 }
                 
                 Log::info('Rotated image saved successfully', [
                     'path' => $rotatedImagePath,
                     'full_path' => Storage::disk('public')->path($rotatedImagePath),
-                    'file_exists' => Storage::disk('public')->exists($rotatedImagePath)
+                    'file_size' => Storage::disk('public')->size($rotatedImagePath)
                 ]);
                 
             } catch (\Exception $saveException) {
                 Log::error('Failed to save rotated image', [
                     'error' => $saveException->getMessage(),
                     'path' => $rotatedImagePath,
-                    'directory_exists' => file_exists($rotatedDirPath),
-                    'directory_writable' => is_writable($rotatedDirPath)
+                    'directory_exists' => Storage::disk('public')->exists($rotatedDir),
+                    'directory_path' => Storage::disk('public')->path($rotatedDir),
+                    'directory_writable' => is_writable(Storage::disk('public')->path($rotatedDir))
                 ]);
-                throw $saveException;
+                throw new \Exception("Error applying rotation: " . $saveException->getMessage());
             }
 
             // Update the image path in the database for this page
