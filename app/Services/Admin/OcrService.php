@@ -362,20 +362,19 @@ class OcrService
                 ];
             }
 
-            // Create rotated directory if it doesn't exist
+            // Create rotated directory if it doesn't exist - using same approach as ProcessOcr.php
             $rotatedDir = "ocr_results/{$id}/rotated";
-            $rotatedDirPath = storage_path('app/public/' . $rotatedDir);
+            $rotatedDirPath = Storage::disk('public')->path($rotatedDir);
             
-            // Use Laravel Storage to ensure proper directory creation with correct permissions
-            if (!Storage::disk('public')->exists("ocr_results/{$id}/rotated")) {
-                Storage::disk('public')->makeDirectory("ocr_results/{$id}/rotated");
+            // Create directory using mkdir with proper permissions (same as ProcessOcr.php)
+            if (!file_exists($rotatedDirPath)) {
+                mkdir($rotatedDirPath, 0755, true);
             }
 
             // Generate rotated image filename
             $pathInfo = pathinfo($originalImagePath);
             $rotatedImageName = $pathInfo['filename'] . "_page_{$pageNumber}_rotated_{$rotationDegree}deg." . $pathInfo['extension'];
             $rotatedImagePath = $rotatedDir . '/' . $rotatedImageName;
-            $fullRotatedPath = storage_path('app/public/' . $rotatedImagePath);
 
             // Load and rotate the image using Intervention Image
             $image = \Intervention\Image\Laravel\Facades\Image::read($fullOriginalPath);
@@ -383,8 +382,8 @@ class OcrService
             // Apply rotation (negative because Intervention Image rotates counter-clockwise)
             $image->rotate(-$rotationDegree);
             
-            // Save the rotated image
-            $image->save($fullRotatedPath);
+            // Save the rotated image using Storage::disk('public')->put() like CropRegions.php
+            Storage::disk('public')->put($rotatedImagePath, $image->encode());
 
             // Update the image path in the database for this page
             $updatedImagePaths = $imagePaths;
