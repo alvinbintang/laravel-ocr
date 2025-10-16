@@ -399,23 +399,19 @@ class OcrService
                     throw new \Exception("Directory does not exist: {$rotatedDir}");
                 }
                 
-                // UPDATED: Use different encoding approach for better compatibility
-                $encodedImage = $image->encode('png', 90);
-                $saveResult = Storage::disk('public')->put($rotatedImagePath, $encodedImage);
-                
-                if (!$saveResult) {
-                    throw new \Exception('Storage::put returned false');
-                }
+                // UPDATED: Use correct Intervention Image encoding for Laravel
+                $fullRotatedPath = Storage::disk('public')->path($rotatedImagePath);
+                $image->save($fullRotatedPath, 90, 'png');
                 
                 // Verify file was actually saved
-                if (!Storage::disk('public')->exists($rotatedImagePath)) {
+                if (!file_exists($fullRotatedPath)) {
                     throw new \Exception('File verification failed - file does not exist after save');
                 }
                 
                 Log::info('Rotated image saved successfully', [
                     'path' => $rotatedImagePath,
-                    'full_path' => Storage::disk('public')->path($rotatedImagePath),
-                    'file_size' => Storage::disk('public')->size($rotatedImagePath)
+                    'full_path' => $fullRotatedPath,
+                    'file_size' => filesize($fullRotatedPath)
                 ]);
                 
             } catch (\Exception $saveException) {
