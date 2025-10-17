@@ -48,7 +48,27 @@ class CropRegions implements ShouldQueue
                 throw new \Exception("Image not found for page {$this->currentPage}");
             }
 
-            $imagePath = storage_path('app/public/' . $imagePaths[$this->currentPage - 1]);
+            $imageRelativePath = $imagePaths[$this->currentPage - 1];
+            $imagePath = storage_path('app/public/' . $imageRelativePath);
+            
+            // FIXED: Check if image file exists, log for debugging
+            if (!file_exists($imagePath)) {
+                \Log::error("Image file not found", [
+                    'page' => $this->currentPage,
+                    'relative_path' => $imageRelativePath,
+                    'full_path' => $imagePath,
+                    'file_exists' => false
+                ]);
+                throw new \Exception("Image file not found: {$imagePath}");
+            }
+            
+            \Log::info("Using image for cropping", [
+                'page' => $this->currentPage,
+                'relative_path' => $imageRelativePath,
+                'full_path' => $imagePath,
+                'file_exists' => true,
+                'file_size' => filesize($imagePath)
+            ]);
             
             // Initialize array for cropped images
             $croppedImages = [];
@@ -58,11 +78,12 @@ class CropRegions implements ShouldQueue
             // Get rotation for this page - use 0 if no rotation (for backend-rotated images)
             $rotation = $this->pageRotation ?? 0;
             
-            // UPDATED: For backend-rotated images, coordinates are already correct, no transformation needed
+            // FIXED: For backend-rotated images, coordinates are already correct, no transformation needed
+            // The image path already points to the rotated image, so we don't need coordinate transformation
             \Log::info("Processing crop regions", [
                 'page' => $this->currentPage,
                 'rotation' => $rotation,
-                'note' => $rotation > 0 ? 'Frontend coordinates from rotated view' : 'Backend image already rotated, coordinates correct'
+                'note' => 'Using rotated image directly, no coordinate transformation needed'
             ]);
 
             // Get actual image dimensions for coordinate scaling
@@ -70,31 +91,20 @@ class CropRegions implements ShouldQueue
             $imageHeight = $image->height();
 
             foreach ($this->regions as $region) {
-                // UPDATED: Only transform coordinates if rotation > 0 (old workflow with visual rotation)
-                // For backend-rotated images (new workflow), coordinates are already correct
-                if ($rotation > 0) {
-                    $transformedRegion = $this->transformCoordinatesFromRotatedView($region, $rotation);
-                } else {
-                    $transformedRegion = $region;
-                }
-
-                // Scale coordinates from preview to actual image dimensions
-                $scaledRegion = $this->scaleCoordinates($transformedRegion, $imageWidth, $imageHeight);
+                // FIXED: Since we're using the rotated image directly, no coordinate transformation needed
+                // The coordinates from the frontend are already correct for the rotated image
+                $scaledRegion = $this->scaleCoordinates($region, $imageWidth, $imageHeight);
 
                 // Crop the region from the image
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
                 
-                // UPDATED: Only apply rotation to cropped image if rotation > 0 (old workflow)
-                // For backend-rotated images, no additional rotation needed
-                if ($rotation > 0) {
-                    $croppedImage->rotate(-$rotation);
-                    \Log::info("Applied rotation to cropped image", [
-                        'page' => $this->currentPage,
-                        'region_id' => $region['id'],
-                        'rotation' => $rotation,
-                        'applied_rotation' => -$rotation
-                    ]);
-                }
+                // FIXED: No additional rotation needed since we're cropping from the already rotated image
+                \Log::info("Cropped region from rotated image", [
+                    'page' => $this->currentPage,
+                    'region_id' => $region['id'],
+                    'coordinates' => $scaledRegion,
+                    'note' => 'No additional rotation applied - using rotated image directly'
+                ]);
                 
                 // Save cropped image
                 $croppedImageName = "cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
