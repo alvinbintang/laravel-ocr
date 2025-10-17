@@ -113,8 +113,62 @@ class CropRegions implements ShouldQueue
                 // Ensure directory exists
                 Storage::disk('public')->makeDirectory(dirname($croppedImagePath));
                 
-                // Save the cropped image
-                Storage::disk('public')->put($croppedImagePath, $croppedImage->encode());
+                // FIXED: Add logging and error handling for image saving
+                try {
+                    // Save the cropped image
+                    $imageData = $croppedImage->encode('png');
+                    
+                    // FIXED: Debug the storage path and directory creation
+                    $storagePath = Storage::disk('public')->path($croppedImagePath);
+                    $storageDir = dirname($storagePath);
+                    
+                    \Log::info("Attempting to save cropped image", [
+                        'page' => $this->currentPage,
+                        'region_id' => $region['id'],
+                        'relative_path' => $croppedImagePath,
+                        'full_path' => $storagePath,
+                        'directory' => $storageDir,
+                        'directory_exists' => file_exists($storageDir),
+                        'image_data_size' => strlen($imageData)
+                    ]);
+                    
+                    // FIXED: Ensure directory exists using native PHP
+                    if (!file_exists($storageDir)) {
+                        mkdir($storageDir, 0755, true);
+                        \Log::info("Created directory", ['path' => $storageDir]);
+                    }
+                    
+                    // FIXED: Use direct file_put_contents instead of Storage facade
+                    $bytesWritten = file_put_contents($storagePath, $imageData);
+                    
+                    if ($bytesWritten === false) {
+                        throw new \Exception("Failed to write cropped image to disk");
+                    }
+                    
+                    // Verify file was actually saved
+                    if (!file_exists($storagePath)) {
+                        throw new \Exception("File verification failed - cropped image not found after save");
+                    }
+                    
+                    \Log::info("Cropped image saved successfully", [
+                        'page' => $this->currentPage,
+                        'region_id' => $region['id'],
+                        'relative_path' => $croppedImagePath,
+                        'full_path' => $storagePath,
+                        'file_size' => filesize($storagePath),
+                        'bytes_written' => $bytesWritten
+                    ]);
+                    
+                } catch (\Exception $saveException) {
+                    \Log::error("Failed to save cropped image", [
+                        'page' => $this->currentPage,
+                        'region_id' => $region['id'],
+                        'path' => $croppedImagePath,
+                        'error' => $saveException->getMessage(),
+                        'directory_exists' => Storage::disk('public')->exists(dirname($croppedImagePath))
+                    ]);
+                    throw $saveException;
+                }
                 
                 $croppedImages[] = [
                     'region_id' => $region['id'],

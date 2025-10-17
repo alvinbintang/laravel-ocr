@@ -74,7 +74,11 @@
                                             </div>
                                             
                                             <div class="border border-gray-200 rounded overflow-hidden">
-                                                @if(isset($image['path']) && file_exists(storage_path('app/public/' . $image['path'])))
+                                                @if(isset($image['image_path']) && file_exists(storage_path('app/public/' . $image['image_path'])))
+                                                    <img src="{{ asset('storage/' . $image['image_path']) }}" 
+                                                         alt="Cropped Region {{ $index + 1 }}" 
+                                                         class="w-full h-auto max-h-64 object-contain bg-white">
+                                                @elseif(isset($image['path']) && file_exists(storage_path('app/public/' . $image['path'])))
                                                     <img src="{{ asset('storage/' . $image['path']) }}" 
                                                          alt="Cropped Region {{ $index + 1 }}" 
                                                          class="w-full h-auto max-h-64 object-contain bg-white">
@@ -85,7 +89,7 @@
                                                 @else
                                                     <div class="w-full h-32 bg-gray-200 flex items-center justify-center">
                                                         <p class="text-gray-500 text-sm">Gambar tidak tersedia</p>
-                                                        <p class="text-xs text-gray-400 mt-1">Debug: {{ json_encode(array_keys($image)) }}</p>
+                                                        <p class="text-xs text-gray-400 mt-1">Debug: {{ json_encode($image) }}</p>
                                                     </div>
                                                 @endif
                                             </div>
