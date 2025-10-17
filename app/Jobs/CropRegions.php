@@ -115,10 +115,7 @@ class CropRegions implements ShouldQueue
                 
                 // FIXED: Add logging and error handling for image saving
                 try {
-                    // Save the cropped image
-                    $imageData = $croppedImage->encode('png');
-                    
-                    // FIXED: Debug the storage path and directory creation
+                    // FIXED: Use save() method directly instead of encode() to avoid EncoderInterface error
                     $storagePath = Storage::disk('public')->path($croppedImagePath);
                     $storageDir = dirname($storagePath);
                     
@@ -128,8 +125,7 @@ class CropRegions implements ShouldQueue
                         'relative_path' => $croppedImagePath,
                         'full_path' => $storagePath,
                         'directory' => $storageDir,
-                        'directory_exists' => file_exists($storageDir),
-                        'image_data_size' => strlen($imageData)
+                        'directory_exists' => file_exists($storageDir)
                     ]);
                     
                     // FIXED: Ensure directory exists using native PHP
@@ -138,12 +134,8 @@ class CropRegions implements ShouldQueue
                         \Log::info("Created directory", ['path' => $storageDir]);
                     }
                     
-                    // FIXED: Use direct file_put_contents instead of Storage facade
-                    $bytesWritten = file_put_contents($storagePath, $imageData);
-                    
-                    if ($bytesWritten === false) {
-                        throw new \Exception("Failed to write cropped image to disk");
-                    }
+                    // FIXED: Use save() method directly like in ProcessRegions.php
+                    $croppedImage->save($storagePath);
                     
                     // Verify file was actually saved
                     if (!file_exists($storagePath)) {
@@ -155,8 +147,7 @@ class CropRegions implements ShouldQueue
                         'region_id' => $region['id'],
                         'relative_path' => $croppedImagePath,
                         'full_path' => $storagePath,
-                        'file_size' => filesize($storagePath),
-                        'bytes_written' => $bytesWritten
+                        'file_size' => filesize($storagePath)
                     ]);
                     
                 } catch (\Exception $saveException) {
