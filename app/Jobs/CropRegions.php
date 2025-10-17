@@ -112,24 +112,15 @@ class CropRegions implements ShouldQueue
                 // Crop the region from the image
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
                 
-                // FIXED: Apply rotation to cropped image if we're using original image
-                if (!$isUsingRotatedImage && $rotation > 0) {
-                    $croppedImage->rotate($rotation); // FIXED: Use positive rotation for preview display to match user's rotation direction
-                    \Log::info("Applied rotation to cropped image", [
-                        'page' => $this->currentPage,
-                        'region_id' => $region['id'],
-                        'rotation' => $rotation,
-                        'applied_rotation' => $rotation,
-                        'note' => 'Rotated cropped image to match user rotation direction for preview'
-                    ]);
-                } else {
-                    \Log::info("No rotation applied to cropped image", [
-                        'page' => $this->currentPage,
-                        'region_id' => $region['id'],
-                        'is_using_rotated_image' => $isUsingRotatedImage,
-                        'rotation' => $rotation,
-                        'note' => $isUsingRotatedImage ? 'Already using rotated image' : 'No rotation needed'
-                    ]);
+                // REMOVED: No rotation applied to cropped image since rotation is already handled during preview
+                // The image being used is already in the correct orientation
+                \Log::info("Cropped image without additional rotation", [
+                    'page' => $this->currentPage,
+                    'region_id' => $region['id'],
+                    'is_using_rotated_image' => $isUsingRotatedImage,
+                    'rotation' => $rotation,
+                    'note' => 'No additional rotation applied - image is already in correct orientation'
+                ]);
                 }
                 
                 // Save cropped image
