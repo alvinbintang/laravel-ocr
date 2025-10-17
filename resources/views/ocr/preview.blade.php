@@ -148,7 +148,7 @@
                                 // UPDATED: Initialize rotation variables and workflow state
                                 let pageRotations = {!! json_encode($ocrResult->page_rotations ?? []) !!} || {};
                                 let currentPage = 1;
-                                let appliedRotations = {!! json_encode($ocrResult->applied_rotations ?? []) !!} || {}; // ADDED: Track applied rotations
+                                let appliedRotations = {!! json_encode($ocrResult->page_rotations ?? []) !!} || {}; // UPDATED: Use page_rotations from database
                                 let currentWorkflowPhase = 'rotation'; // ADDED: Track current phase (rotation or selection)
                                 let pendingRotation = 0; // ADDED: Track pending rotation for current page
                                 
@@ -345,16 +345,16 @@
                                 .then(response => response.json())
                                 .then(data => {
                                     if (data.success) {
-                                        // Update applied rotations
-                                        appliedRotations[currentPage] = (appliedRotations[currentPage] || 0) + pendingRotation;
+                                        // UPDATED: Store the actual rotation degree applied to backend
+                                        appliedRotations[currentPage] = data.rotation_applied;
                                         pendingRotation = 0;
                                         
                                         // Update image source to the rotated image
                                         const previewImage = document.getElementById('preview-image');
                                         previewImage.src = data.rotated_image_url + '?t=' + Date.now(); // Add timestamp to force reload
                                         
-                                        // Reset visual rotation since image is now actually rotated
-                                        appliedRotations[currentPage] = 0; // Reset since backend image is now rotated
+                                        // UPDATED: Don't reset applied rotation - keep track of what was applied
+                                        // appliedRotations[currentPage] = 0; // REMOVED: This was causing the issue
                                         
                                         updateRotationButtons();
                                         updateWorkflowPhase();
