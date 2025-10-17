@@ -121,7 +121,6 @@ class CropRegions implements ShouldQueue
                     'rotation' => $rotation,
                     'note' => 'No additional rotation applied - image is already in correct orientation'
                 ]);
-                }
                 
                 // Save cropped image
                 $croppedImageName = "cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
