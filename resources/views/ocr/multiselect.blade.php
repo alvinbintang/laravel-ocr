@@ -265,7 +265,7 @@
     <script>
         // Global variables
         let currentPage = 0;
-        let appliedRotations = @json($ocrResult->applied_rotations ?? []);
+        let appliedRotations = @json($ocrResult->page_rotations ?? []); // UPDATED: Use page_rotations from database
         const images = @json($ocrResult->images);
         const ocrResultId = {{ $ocrResult->id }};
         let regionManager;
@@ -441,6 +441,32 @@
                 this.bindEvents();
             }
 
+            // ADDED: Function to adjust coordinates for rotated images
+            getAdjustedCoords(x, y) {
+                const rotation = appliedRotations[currentPage] || 0;
+                if (!this.image) return { x, y };
+
+                const w = this.image.offsetWidth;
+                const h = this.image.offsetHeight;
+
+                // Only adjust coordinates if image has been rotated and applied to backend
+                if (rotation === 0) return { x, y };
+
+                switch (rotation) {
+                    case 90:
+                        // 90 degrees clockwise rotation
+                        return { x: h - y, y: x };
+                    case 180:
+                        // 180 degrees rotation
+                        return { x: w - x, y: h - y };
+                    case 270:
+                        // 270 degrees clockwise rotation
+                        return { x: y, y: w - x };
+                    default:
+                        return { x, y };
+                }
+            }
+
             bindEvents() {
                 this.overlay.addEventListener('mousedown', this.handleMouseDown.bind(this));
                 this.overlay.addEventListener('mousemove', this.handleMouseMove.bind(this));
@@ -458,15 +484,32 @@
                 if (!this.isDrawing) return;
 
                 const rect = this.overlay.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+                const imageRect = this.image.getBoundingClientRect();
+                
+                // Calculate position relative to image
+                const imgLeft = (rect.width - imageRect.width) / 2;
+                const imgTop = (rect.height - imageRect.height) / 2;
+                
+                let x = e.clientX - rect.left;
+                let y = e.clientY - rect.top;
+                
+                // Check if click is within image bounds
+                if (x < imgLeft || x > imgLeft + imageRect.width || 
+                    y < imgTop || y > imgTop + imageRect.height) return;
+                
+                // Adjust coordinates relative to image
+                x = x - imgLeft;
+                y = y - imgTop;
+                
+                // ADDED: Apply coordinate adjustment for rotated images
+                const adjusted = this.getAdjustedCoords(x, y);
 
                 this.currentRegion = {
                     id: ++this.regionCounter,
-                    startX: x,
-                    startY: y,
-                    x: x,
-                    y: y,
+                    startX: adjusted.x,
+                    startY: adjusted.y,
+                    x: adjusted.x,
+                    y: adjusted.y,
                     width: 0,
                     height: 0,
                     element: null
@@ -475,8 +518,8 @@
                 // Create region element
                 const regionElement = document.createElement('div');
                 regionElement.className = 'region';
-                regionElement.style.left = x + 'px';
-                regionElement.style.top = y + 'px';
+                regionElement.style.left = (adjusted.x + imgLeft) + 'px';
+                regionElement.style.top = (adjusted.y + imgTop) + 'px';
                 regionElement.style.width = '0px';
                 regionElement.style.height = '0px';
                 
@@ -488,21 +531,34 @@
                 if (!this.isDrawing || !this.currentRegion) return;
 
                 const rect = this.overlay.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+                const imageRect = this.image.getBoundingClientRect();
+                
+                // Calculate position relative to image
+                const imgLeft = (rect.width - imageRect.width) / 2;
+                const imgTop = (rect.height - imageRect.height) / 2;
+                
+                let x = e.clientX - rect.left - imgLeft;
+                let y = e.clientY - rect.top - imgTop;
+                
+                // Clamp coordinates to image bounds
+                x = Math.max(0, Math.min(x, imageRect.width));
+                y = Math.max(0, Math.min(y, imageRect.height));
+                
+                // ADDED: Apply coordinate adjustment for rotated images
+                const adjusted = this.getAdjustedCoords(x, y);
 
-                const width = Math.abs(x - this.currentRegion.startX);
-                const height = Math.abs(y - this.currentRegion.startY);
-                const left = Math.min(x, this.currentRegion.startX);
-                const top = Math.min(y, this.currentRegion.startY);
+                const width = Math.abs(adjusted.x - this.currentRegion.startX);
+                const height = Math.abs(adjusted.y - this.currentRegion.startY);
+                const left = Math.min(adjusted.x, this.currentRegion.startX);
+                const top = Math.min(adjusted.y, this.currentRegion.startY);
 
                 this.currentRegion.x = left;
                 this.currentRegion.y = top;
                 this.currentRegion.width = width;
                 this.currentRegion.height = height;
 
-                this.currentRegion.element.style.left = left + 'px';
-                this.currentRegion.element.style.top = top + 'px';
+                this.currentRegion.element.style.left = (left + imgLeft) + 'px';
+                this.currentRegion.element.style.top = (top + imgTop) + 'px';
                 this.currentRegion.element.style.width = width + 'px';
                 this.currentRegion.element.style.height = height + 'px';
             }

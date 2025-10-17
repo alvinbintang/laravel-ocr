@@ -353,8 +353,10 @@
                                         const previewImage = document.getElementById('preview-image');
                                         previewImage.src = data.rotated_image_url + '?t=' + Date.now(); // Add timestamp to force reload
                                         
-                                        // UPDATED: Don't reset applied rotation - keep track of what was applied
-                                        // appliedRotations[currentPage] = 0; // REMOVED: This was causing the issue
+                                        // ADDED: Wait for image to load then apply visual rotation to show correct orientation immediately
+                                        previewImage.onload = function() {
+                                            applyVisualRotation();
+                                        };
                                         
                                         updateRotationButtons();
                                         updateWorkflowPhase();
