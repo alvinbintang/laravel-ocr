@@ -661,11 +661,11 @@
                                                            isset($image['page']) && $image['page'] == ($result['page'] ?? 1);
                                                 });
                                             @endphp
-                                            @if($croppedImage && isset($croppedImage['path']))
+                                            @if($croppedImage && isset($croppedImage['image_path']))
                                             <div class="mb-3">
                                                 <h5 class="text-sm font-medium text-gray-700 mb-2">Selected Image:</h5>
                                                 <div class="border border-gray-300 rounded-lg p-2 bg-white inline-block">
-                                                    <img src="{{ asset('storage/' . $croppedImage['path']) }}" 
+                                                    <img src="{{ asset('storage/' . $croppedImage['image_path']) }}" 
                                                          alt="Cropped region {{ $index + 1 }}" 
                                                          class="max-w-xs max-h-32 object-contain rounded shadow-sm">
                                                 </div>
@@ -709,8 +709,8 @@
                                                                            isset($image['page']) && $image['page'] == ($result['page'] ?? 1);
                                                                 });
                                                             @endphp
-                                                            @if($croppedImage && isset($croppedImage['path']))
-                                                                <img src="{{ asset('storage/' . $croppedImage['path']) }}" 
+                                                            @if($croppedImage && isset($croppedImage['image_path']))
+                                                                <img src="{{ asset('storage/' . $croppedImage['image_path']) }}" 
                                                                      alt="Cropped region {{ $index + 1 }}" 
                                                                      class="w-16 h-16 object-contain border border-gray-300 rounded">
                                                             @else
