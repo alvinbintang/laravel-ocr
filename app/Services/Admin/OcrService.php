@@ -159,10 +159,7 @@ class OcrService
             
             // Process each page's regions separately
             foreach ($regionsByPage as $page => $pageRegions) {
-                // UPDATED: Get specific rotation for this page
-                $pageRotation = isset($pageRotations[$page]) ? (int)$pageRotations[$page] : 0;
-                
-                ProcessRegions::dispatch($id, $pageRegions, (int)$page, $previewDimensions, $pageRotation);
+                ProcessRegions::dispatch($id, $pageRegions, (int)$page, $previewDimensions);
             }
 
             return [
@@ -587,15 +584,11 @@ class OcrService
                     
                     \Log::info('Regions prepared for page ' . $page . ': ', $regions);
                     
-                    // Get page rotation (already decoded by model accessor)
-                    $pageRotations = $ocrResult->page_rotations ?? [];
-                    $pageRotation = isset($pageRotations[$page]) ? (int)$pageRotations[$page] : 0;
-                    
-                    \Log::info('Page rotation for page ' . $page . ': ' . $pageRotation);
+                    // UPDATED: Removed page rotation logic since rotation is already handled in previous functions
                     
                     // Dispatch OCR processing job
                     \Log::info('Dispatching ProcessRegions job for page: ' . $page);
-                    ProcessRegions::dispatch($id, $regions, (int)$page, null, $pageRotation);
+                    ProcessRegions::dispatch($id, $regions, (int)$page, null);
                 }
 
                 \Log::info('All ProcessRegions jobs dispatched successfully');

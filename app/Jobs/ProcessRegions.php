@@ -20,15 +20,13 @@ class ProcessRegions implements ShouldQueue
     protected $regions;
     protected $currentPage; // ADDED: Track current page
     protected $previewDimensions; // ADDED: Store preview dimensions for scaling
-    protected $pageRotation; // ADDED: Store page rotation
 
-    public function __construct($ocrResultId, array $regions, int $currentPage = 1, array $previewDimensions = null, ?int $pageRotation = null)
+    public function __construct($ocrResultId, array $regions, int $currentPage = 1, array $previewDimensions = null)
     {
         $this->ocrResultId = $ocrResultId;
         $this->regions = $regions;
         $this->currentPage = $currentPage; // ADDED: Store current page
         $this->previewDimensions = $previewDimensions; // ADDED: Store preview dimensions
-        $this->pageRotation = $pageRotation; // ADDED: Store page rotation
     }
 
     public function handle(): void
@@ -57,15 +55,11 @@ class ProcessRegions implements ShouldQueue
 
             $image = Image::read($imagePath);
             
-            // FIXED: Don't rotate the image in backend since coordinates are already correct
-            // and the image should remain in its original orientation
-            $rotation = $this->pageRotation ?? 0;
-            
-            \Log::info("Processing image without rotation", [
+            // UPDATED: Removed rotation logic since rotation is already handled in previous functions
+            \Log::info("Processing image with original coordinates", [
                 'page' => $this->currentPage,
-                'rotation_parameter' => $rotation,
                 'ocr_result_id' => $this->ocrResultId,
-                'note' => 'Image not rotated in backend, coordinates already correct'
+                'note' => 'Using original coordinates without rotation transformation'
             ]);
 
             // ADDED: Get actual OCR image dimensions for coordinate scaling
@@ -73,56 +67,24 @@ class ProcessRegions implements ShouldQueue
             $ocrImageHeight = $image->height();
 
             foreach ($this->regions as $region) {
-                // FIXED: Frontend sends coordinates from rotated view, but backend processes original image
-                // We need to transform coordinates from rotated view back to original image coordinates
-                if ($rotation > 0) {
-                    $transformedRegion = $this->transformCoordinatesFromRotatedView($region, $rotation);
-                    \Log::info("Transformed coordinates from rotated view", [
-                        'page' => $this->currentPage,
-                        'rotation' => $rotation,
-                        'original_coords' => [
-                            'x' => $region['x'],
-                            'y' => $region['y'],
-                            'width' => $region['width'],
-                            'height' => $region['height']
-                        ],
-                        'transformed_coords' => [
-                            'x' => $transformedRegion['x'],
-                            'y' => $transformedRegion['y'],
-                            'width' => $transformedRegion['width'],
-                            'height' => $transformedRegion['height']
-                        ]
-                    ]);
-                } else {
-                    $transformedRegion = $region;
-                    \Log::info("No rotation, using original coordinates", [
-                        'page' => $this->currentPage,
-                        'rotation' => $rotation,
-                        'region_coords' => [
-                            'x' => $region['x'],
-                            'y' => $region['y'],
-                            'width' => $region['width'],
-                            'height' => $region['height']
-                        ]
-                    ]);
-                }
+                // UPDATED: Use original coordinates directly since rotation is already handled
+                \Log::info("Using original coordinates", [
+                    'page' => $this->currentPage,
+                    'region_coords' => [
+                        'x' => $region['x'],
+                        'y' => $region['y'],
+                        'width' => $region['width'],
+                        'height' => $region['height']
+                    ]
+                ]);
 
                 // ADDED: Scale coordinates from preview to OCR image dimensions
-                $scaledRegion = $this->scaleCoordinates($transformedRegion, $ocrImageWidth, $ocrImageHeight);
+                $scaledRegion = $this->scaleCoordinates($region, $ocrImageWidth, $ocrImageHeight);
 
                 // Crop the region from the image
                 $croppedImage = $image->crop($scaledRegion['width'], $scaledRegion['height'], $scaledRegion['x'], $scaledRegion['y']);
                 
-                // FIXED: Apply rotation to cropped image to match frontend display
-                if ($rotation > 0) {
-                    $croppedImage->rotate(-$rotation); // Negative because Intervention Image rotates counter-clockwise
-                    \Log::info("Applied rotation to cropped image", [
-                        'page' => $this->currentPage,
-                        'region_id' => $region['id'],
-                        'rotation' => $rotation,
-                        'applied_rotation' => -$rotation
-                    ]);
-                }
+                // UPDATED: No rotation applied to cropped image since rotation is already handled
                 
                 // Save to temporary file for OCR processing
                 $tempPath = tempnam(sys_get_temp_dir(), 'ocr_region_') . '.png';
@@ -310,130 +272,6 @@ class ProcessRegions implements ShouldQueue
             'y' => (int) round($region['y'] * $scaleY),
             'width' => (int) round($region['width'] * $scaleX),
             'height' => (int) round($region['height'] * $scaleY),
-            'page' => $region['page'] ?? $this->currentPage
-        ];
-    }
-
-    // FIXED: Transform coordinates from rotated view to original image coordinates
-    private function transformCoordinatesFromRotatedView(array $region, int $rotation): array
-    {
-        // Get the original image dimensions (before rotation)
-        $ocrResult = OcrResult::findOrFail($this->ocrResultId);
-        $imagePaths = $ocrResult->image_paths ?? [];
-        $imagePath = storage_path('app/public/' . $imagePaths[$this->currentPage - 1]);
-        
-        // Read original image to get dimensions
-        $originalImage = Image::read($imagePath);
-        $originalWidth = $originalImage->width();
-        $originalHeight = $originalImage->height();
-        
-        $x = $region['x'];
-        $y = $region['y'];
-        $width = $region['width'];
-        $height = $region['height'];
-
-        // Normalize rotation to 0-359 degrees
-        $rotation = $rotation % 360;
-        if ($rotation < 0) $rotation += 360;
-
-        // Transform coordinates based on rotation
-        // Frontend coordinates are based on rotated view, we need to transform back to original coordinates
-        switch ($rotation) {
-            case 90:
-                // For 90° rotation: rotated (x,y) -> original (originalHeight - y - height, x)
-                $newX = $originalHeight - $y - $height;
-                $newY = $x;
-                $newWidth = $height;
-                $newHeight = $width;
-                break;
-                
-            case 180:
-                // For 180° rotation: rotated (x,y) -> original (originalWidth - x - width, originalHeight - y - height)
-                $newX = $originalWidth - $x - $width;
-                $newY = $originalHeight - $y - $height;
-                $newWidth = $width;
-                $newHeight = $height;
-                break;
-                
-            case 270:
-                // For 270° rotation: rotated (x,y) -> original (y, originalWidth - x - width)
-                $newX = $y;
-                $newY = $originalWidth - $x - $width;
-                $newWidth = $height;
-                $newHeight = $width;
-                break;
-                
-            default:
-                // No rotation
-                $newX = $x;
-                $newY = $y;
-                $newWidth = $width;
-                $newHeight = $height;
-                break;
-        }
-
-        return [
-            'id' => $region['id'],
-            'x' => (int) round($newX),
-            'y' => (int) round($newY),
-            'width' => (int) round($newWidth),
-            'height' => (int) round($newHeight),
-            'page' => $region['page'] ?? $this->currentPage
-        ];
-    }
-
-    // ADDED: Helper method to transform coordinates based on image rotation
-    private function transformCoordinatesForRotation(array $region, int $imageWidth, int $imageHeight, int $rotation): array
-    {
-        $x = $region['x'];
-        $y = $region['y'];
-        $width = $region['width'];
-        $height = $region['height'];
-
-        // Normalize rotation to 0-359 degrees
-        $rotation = $rotation % 360;
-        if ($rotation < 0) $rotation += 360;
-
-        switch ($rotation) {
-            case 90:
-                // 90 degrees clockwise: (x,y) -> (y, imageWidth - x - width)
-                $newX = $y;
-                $newY = $imageWidth - $x - $width;
-                $newWidth = $height;
-                $newHeight = $width;
-                break;
-                
-            case 180:
-                // 180 degrees: (x,y) -> (imageWidth - x - width, imageHeight - y - height)
-                $newX = $imageWidth - $x - $width;
-                $newY = $imageHeight - $y - $height;
-                $newWidth = $width;
-                $newHeight = $height;
-                break;
-                
-            case 270:
-                // 270 degrees clockwise (or 90 counter-clockwise): (x,y) -> (imageHeight - y - height, x)
-                $newX = $imageHeight - $y - $height;
-                $newY = $x;
-                $newWidth = $height;
-                $newHeight = $width;
-                break;
-                
-            default:
-                // No rotation or unsupported angle
-                $newX = $x;
-                $newY = $y;
-                $newWidth = $width;
-                $newHeight = $height;
-                break;
-        }
-
-        return [
-            'id' => $region['id'],
-            'x' => (int) round($newX),
-            'y' => (int) round($newY),
-            'width' => (int) round($newWidth),
-            'height' => (int) round($newHeight),
             'page' => $region['page'] ?? $this->currentPage
         ];
     }
