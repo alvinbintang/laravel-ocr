@@ -35,7 +35,7 @@
                 <div class="bg-white rounded-lg shadow-md p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold text-gray-800">Preview Gambar</h2>
-                        <div class="flex items-center space-x-4">
+                        <div class="flex flex-wrap gap-2 items-center">
                             <!-- Page Counter -->
                             <div class="flex items-center space-x-2">
                                 <span class="text-sm text-gray-600">Pages ({{ count($ocrResult->images) }} total)</span>
@@ -46,33 +46,34 @@
                                 </select>
                             </div>
                             
-                            <!-- Rotation Controls -->
-                            <div class="flex items-center space-x-2">
-                                <button id="rotate-left" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm">
-                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z"></path>
-                                    </svg>
-                                    Rotate Left
-                                </button>
-                                <button id="rotate-right" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm">
-                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M21 12l-6.414 6.414a2 2 0 01-1.414.586H5a2 2 0 01-2-2V7a2 2 0 012-2h8.172a2 2 0 011.414.586L21 12z"></path>
-                                    </svg>
-                                    Rotate Right
-                                </button>
-                                <button id="apply-rotation" class="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm" style="display: none;">
-                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                    </svg>
-                                    Apply
-                                </button>
-                                <button id="reset-rotation" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm" style="display: none;">
-                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                                    </svg>
-                                    Reset
-                                </button>
-                            </div>
+                            <!-- UPDATED: Separator -->
+                            <div class="border-l border-gray-300 mx-2"></div>
+                            
+                            <!-- UPDATED: Rotation Controls -->
+                            <button id="rotate-left" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z"></path>
+                                </svg>
+                                Rotate Left
+                            </button>
+                            <button id="rotate-right" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M21 12l-6.414 6.414a2 2 0 01-1.414.586H5a2 2 0 01-2-2V7a2 2 0 012-2h8.172a2 2 0 011.414.586L21 12z"></path>
+                                </svg>
+                                Rotate Right
+                            </button>
+                            <button id="apply-rotation" class="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm" style="display: none;">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                Apply
+                            </button>
+                            <button id="reset-rotation" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center text-sm" style="display: none;">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Reset
+                            </button>
                         </div>
                     </div>
 
@@ -232,13 +233,25 @@
         function updateRotationButtons() {
             const applyBtn = document.getElementById('apply-rotation');
             const resetBtn = document.getElementById('reset-rotation');
+            // UPDATED: Get continue button to disable/enable based on rotation state
+            const continueBtn = document.getElementById('continue-btn');
             
             if (pendingRotation !== 0) {
                 applyBtn.style.display = 'flex';
                 resetBtn.style.display = 'flex';
+                // UPDATED: Disable continue button when rotation is pending
+                if (continueBtn) {
+                    continueBtn.disabled = true;
+                    continueBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
             } else {
                 applyBtn.style.display = 'none';
                 resetBtn.style.display = 'none';
+                // UPDATED: Re-enable continue button when no rotation is pending
+                if (continueBtn) {
+                    continueBtn.disabled = false;
+                    continueBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
             }
         }
 

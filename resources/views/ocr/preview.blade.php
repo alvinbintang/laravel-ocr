@@ -58,7 +58,37 @@
                             </div>
                             
                             @if($ocrResult->status === 'awaiting_selection' && $ocrResult->page_count > 0)
-                            <div class="flex space-x-2">
+                            <div class="flex flex-wrap gap-2">
+                                <!-- UPDATED: Rotation Controls -->
+                                <button id="rotate-left-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    Rotate Left
+                                </button>
+                                <button id="rotate-right-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 20v-5h-.581m0 0a8.003 8.003 0 01-15.357-2M4.581 15H9m11-11v5h-.581m0 0a8.001 8.001 0 00-15.357 2M4.581 9H9" />
+                                    </svg>
+                                    Rotate Right
+                                </button>
+                                <button id="apply-rotation-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center" style="display: none;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Apply Rotation
+                                </button>
+                                <button id="reset-rotation-btn" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-md text-sm font-medium flex items-center" style="display: none;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    Reset
+                                </button>
+                                
+                                <!-- UPDATED: Separator -->
+                                <div class="border-l border-gray-300 mx-2"></div>
+                                
+                                <!-- UPDATED: Region Controls -->
                                 <button id="add-region-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium">
                                     Add Region
                                 </button>
@@ -106,43 +136,6 @@
 
                         <!-- Image Preview Container -->
                         <div class="relative mb-6 bg-gray-300 min-h-96 flex items-center justify-center" id="image-preview-container">
-                            <!-- UPDATED: Rotation Controls with Apply Button -->
-                            <div class="flex justify-end mb-4 pr-4">
-                                <div class="flex space-x-2 items-center">
-                                    <!-- Rotation Phase Controls -->
-                                    <div id="rotation-controls" class="flex space-x-2">
-                                        <button id="rotate-left-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm flex items-center shadow-md transition-colors">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                            </svg>
-                                            Rotate Left
-                                        </button>
-                                        <button id="rotate-right-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm flex items-center shadow-md transition-colors">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 20v-5h-.581m0 0a8.003 8.003 0 01-15.357-2M4.581 15H9m11-11v5h-.581m0 0a8.001 8.001 0 00-15.357 2M4.581 9H9" />
-                                            </svg>
-                                            Rotate Right
-                                        </button>
-                                        <button id="apply-rotation-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm flex items-center shadow-md transition-colors" style="display: none;">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                            Apply Rotation
-                                        </button>
-                                        <button id="reset-rotation-btn" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded text-sm flex items-center shadow-md transition-colors" style="display: none;">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                            </svg>
-                                            Reset
-                                        </button>
-                                    </div>
-                                    
-                                    <!-- Phase Indicator -->
-                                    <div id="phase-indicator" class="ml-4 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                                        Phase 1: Rotation
-                                    </div>
-                                </div>
-                            </div>
                             
                             <script>
                                 // UPDATED: Initialize rotation variables and workflow state
@@ -299,17 +292,56 @@
                                 }
                             }
                             
-                            // ADDED: Function to update rotation button visibility
+                            // UPDATED: Function to update rotation button visibility and disable other buttons
                             function updateRotationButtons() {
                                 const applyBtn = document.getElementById('apply-rotation-btn');
                                 const resetBtn = document.getElementById('reset-rotation-btn');
+                                const addRegionBtn = document.getElementById('add-region-btn');
+                                const clearRegionsBtn = document.getElementById('clear-regions-btn');
+                                const processRegionsBtn = document.getElementById('process-regions-btn');
                                 
                                 if (pendingRotation !== 0) {
+                                    // Show apply and reset buttons
                                     applyBtn.style.display = 'flex';
                                     resetBtn.style.display = 'flex';
+                                    
+                                    // ADDED: Disable other action buttons when rotation is pending
+                                    if (addRegionBtn) {
+                                        addRegionBtn.disabled = true;
+                                        addRegionBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                                        addRegionBtn.classList.remove('hover:bg-blue-700');
+                                    }
+                                    if (clearRegionsBtn) {
+                                        clearRegionsBtn.disabled = true;
+                                        clearRegionsBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                                        clearRegionsBtn.classList.remove('hover:bg-gray-700');
+                                    }
+                                    if (processRegionsBtn) {
+                                        processRegionsBtn.disabled = true;
+                                        processRegionsBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                                        processRegionsBtn.classList.remove('hover:bg-green-700');
+                                    }
                                 } else {
+                                    // Hide apply and reset buttons
                                     applyBtn.style.display = 'none';
                                     resetBtn.style.display = 'none';
+                                    
+                                    // ADDED: Re-enable other action buttons when no rotation is pending
+                                    if (addRegionBtn) {
+                                        addRegionBtn.disabled = false;
+                                        addRegionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                                        addRegionBtn.classList.add('hover:bg-blue-700');
+                                    }
+                                    if (clearRegionsBtn) {
+                                        clearRegionsBtn.disabled = false;
+                                        clearRegionsBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                                        clearRegionsBtn.classList.add('hover:bg-gray-700');
+                                    }
+                                    if (processRegionsBtn && !processRegionsBtn.hasAttribute('data-originally-disabled')) {
+                                        processRegionsBtn.disabled = false;
+                                        processRegionsBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                                        processRegionsBtn.classList.add('hover:bg-green-700');
+                                    }
                                 }
                             }
                             
