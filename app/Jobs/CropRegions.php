@@ -123,9 +123,11 @@ class CropRegions implements ShouldQueue
                 ]);
                 
                 // Save cropped image
-                // UPDATED: Use single 'ocr/cropped/' folder with prefixed filenames, remove mkdir and makeDirectory
-                $croppedImageName = "{$this->ocrResultId}_cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
-                $croppedImagePath = "ocr/cropped/{$croppedImageName}";
+                $croppedImageName = "cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
+                $croppedImagePath = "ocr_results/{$this->ocrResultId}/cropped/{$croppedImageName}";
+                
+                // Ensure directory exists
+                Storage::disk('public')->makeDirectory(dirname($croppedImagePath));
                 
                 // FIXED: Add logging and error handling for image saving
                 try {
@@ -141,6 +143,12 @@ class CropRegions implements ShouldQueue
                         'directory' => $storageDir,
                         'directory_exists' => file_exists($storageDir)
                     ]);
+                    
+                    // FIXED: Ensure directory exists using native PHP
+                    if (!file_exists($storageDir)) {
+                        mkdir($storageDir, 0755, true);
+                        \Log::info("Created directory", ['path' => $storageDir]);
+                    }
                     
                     // FIXED: Use save() method directly like in ProcessRegions.php
                     $croppedImage->save($storagePath);
