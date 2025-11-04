@@ -54,8 +54,8 @@ class OcrService
             throw new \Exception('File bukan PDF yang valid. Pastikan file tidak corrupt.');
         }
 
-        // Simpan PDF
-        $path = $pdfFile->store('ocr');
+        // Simpan PDF ke satu folder khusus untuk jenis file PDF
+        $path = $pdfFile->store('ocr_pdfs');
 
         // Simpan informasi ke database
         $ocrResult = $this->ocrResultRepository->create([
@@ -359,19 +359,15 @@ class OcrService
                 ];
             }
 
-            // Create rotated directory if it doesn't exist - UPDATED: Use same approach as ProcessOcr
-            $rotatedDir = "ocr/images/{$id}/rotated";
+            // Gunakan satu folder untuk semua gambar hasil rotasi
+            $rotatedDir = "ocr_rotated";
             $rotatedDirPath = Storage::disk('public')->path($rotatedDir);
-            
-            // UPDATED: Use direct mkdir approach like ProcessOcr.php for consistency
-            if (!file_exists($rotatedDirPath)) {
-                mkdir($rotatedDirPath, 0755, true);
-            }
+            // Sesuai permintaan: tidak perlu ada fungsi mkdir, asumsi folder sudah tersedia
 
             // Generate rotated image filename - UPDATED: Better path handling
             $pathInfo = pathinfo($originalImagePath);
-            $originalFileName = $pathInfo['filename']; // e.g., "page-000"
-            $rotatedImageName = $originalFileName . "_rotated_{$rotationDegree}deg." . $pathInfo['extension'];
+            $originalFileName = $pathInfo['filename']; // e.g., "id10-page-000"
+            $rotatedImageName = $originalFileName . "_rotated_{$rotationDegree}deg." . ($pathInfo['extension'] ?? 'png');
             $rotatedImagePath = $rotatedDir . '/' . $rotatedImageName;
 
             // Load and rotate the image using Intervention Image
@@ -414,17 +410,22 @@ class OcrService
             $updatedImagePaths[$pageNumber - 1] = $rotatedImagePath;
 
             // Also update page rotations to reflect the applied rotation
+            // Accumulate rotation relative to original orientation and normalize to [0, 360)
             $currentRotations = $ocrResult->page_rotations ?? [];
-            $currentRotations[$pageNumber] = $rotationDegree;
+            $previousRotation = isset($currentRotations[$pageNumber]) ? (int)$currentRotations[$pageNumber] : 0;
+            $newCumulativeRotation = ($previousRotation + $rotationDegree) % 360;
+            $currentRotations[$pageNumber] = $newCumulativeRotation;
 
+            // Ensure JSON fields are stored as JSON strings
             $this->ocrResultRepository->update($id, [
-                'image_paths' => $updatedImagePaths,
-                'page_rotations' => $currentRotations
+                'image_paths' => json_encode($updatedImagePaths),
+                'page_rotations' => json_encode($currentRotations)
             ]);
 
             return [
                 'success' => true,
                 'message' => 'Image rotated successfully',
+                'rotated_image_path' => $rotatedImagePath,
                 'rotated_image_url' => Storage::url($rotatedImagePath),
                 'rotation_applied' => $rotationDegree,
                 'page_number' => $pageNumber

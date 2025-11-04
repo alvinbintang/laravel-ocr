@@ -178,7 +178,8 @@
         // Global variables
         let currentPage = 0;
         let pendingRotation = 0;
-        let appliedRotations = @json($ocrResult->applied_rotations ?? []);
+        // UPDATED: Use page_rotations from DB (keys are 1-based page numbers)
+        let appliedRotations = @json($ocrResult->page_rotations ?? []);
         const images = @json($ocrResult->images);
         const ocrResultId = {{ $ocrResult->id }};
 
@@ -186,6 +187,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             initializeEventListeners();
             updateRotationStatus();
+            applyVisualRotation();
         });
 
         function initializeEventListeners() {
@@ -211,6 +213,7 @@
             const previewImage = document.getElementById('preview-image');
             previewImage.src = `/storage/${images[currentPage]}`;
             pendingRotation = 0;
+            applyVisualRotation();
             updateRotationButtons();
             updateRotationStatus();
         }
@@ -226,7 +229,8 @@
 
         function applyVisualRotation() {
             const previewImage = document.getElementById('preview-image');
-            const totalRotation = (appliedRotations[currentPage] || 0) + pendingRotation;
+            // In RKA preview, applied rotations are persisted to disk; only show pending rotation visually
+            const totalRotation = pendingRotation;
             previewImage.style.transform = `rotate(${totalRotation}deg)`;
         }
 
@@ -234,7 +238,7 @@
             const applyBtn = document.getElementById('apply-rotation');
             const resetBtn = document.getElementById('reset-rotation');
             // UPDATED: Get continue button to disable/enable based on rotation state
-            const continueBtn = document.getElementById('continue-btn');
+            const continueBtn = document.getElementById('continue-to-multiselect');
             
             if (pendingRotation !== 0) {
                 applyBtn.style.display = 'flex';
@@ -279,15 +283,15 @@
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
                 body: JSON.stringify({
-                    page: currentPage,
-                    rotation: pendingRotation
+                    page_number: currentPage + 1,
+                    rotation_degree: pendingRotation
                 })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     // Update applied rotations
-                    appliedRotations[currentPage] = (appliedRotations[currentPage] || 0) + pendingRotation;
+                    appliedRotations[currentPage + 1] = (appliedRotations[currentPage + 1] || 0) + pendingRotation;
                     pendingRotation = 0;
                     
                     // Reload image
@@ -315,7 +319,8 @@
 
         function updateRotationStatus() {
             const statusDiv = document.getElementById('rotation-status');
-            const appliedRotation = appliedRotations[currentPage] || 0;
+            const statusTextEl = document.getElementById('rotation-status-text');
+            const appliedRotation = appliedRotations[currentPage + 1] || 0;
             
             let statusText = `Halaman ${currentPage + 1}: `;
             if (appliedRotation !== 0) {
@@ -328,7 +333,13 @@
                 statusText += ` | Rotasi pending: ${pendingRotation}°`;
             }
             
-            statusDiv.textContent = statusText;
+            if (statusTextEl) {
+                statusTextEl.textContent = statusText;
+                statusDiv.style.display = 'block';
+            } else {
+                statusDiv.textContent = statusText;
+                statusDiv.style.display = 'block';
+            }
         }
 
         function showNotification(message, type = 'success') {
