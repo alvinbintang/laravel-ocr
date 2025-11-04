@@ -30,13 +30,6 @@ class OcrResult extends Model
         return $value ? json_decode($value, true) : [];
     }
 
-    // ADDED: Backward-compatible accessor to expose image_paths as images for views
-    public function getImagesAttribute($value)
-    {
-        // Utilize existing accessor to ensure we always return an array
-        return $this->image_paths ?? [];
-    }
-
     // Helper method to get total page count
     public function getPageCountAttribute()
     {

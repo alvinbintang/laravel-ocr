@@ -122,9 +122,12 @@ class CropRegions implements ShouldQueue
                     'note' => 'No additional rotation applied - image is already in correct orientation'
                 ]);
                 
-                // Save cropped image to a single folder with id-prefixed filename to avoid collisions
-                $croppedImageName = "id{$this->ocrResultId}-page-{$this->currentPage}-region-{$region['id']}-" . time() . ".png";
-                $croppedImagePath = "ocr_cropped/{$croppedImageName}";
+                // Save cropped image
+                $croppedImageName = "cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
+                $croppedImagePath = "ocr_results/{$this->ocrResultId}/cropped/{$croppedImageName}";
+                
+                // Ensure directory exists
+                Storage::disk('public')->makeDirectory(dirname($croppedImagePath));
                 
                 // FIXED: Add logging and error handling for image saving
                 try {
@@ -141,7 +144,11 @@ class CropRegions implements ShouldQueue
                         'directory_exists' => file_exists($storageDir)
                     ]);
                     
-                    // Sesuai permintaan: tidak perlu ada fungsi mkdir, asumsi folder sudah tersedia
+                    // FIXED: Ensure directory exists using native PHP
+                    if (!file_exists($storageDir)) {
+                        mkdir($storageDir, 0755, true);
+                        \Log::info("Created directory", ['path' => $storageDir]);
+                    }
                     
                     // FIXED: Use save() method directly like in ProcessRegions.php
                     $croppedImage->save($storagePath);

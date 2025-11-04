@@ -337,17 +337,15 @@
                 y: region.y,
                 width: region.width,
                 height: region.height,
-                // Backend expects 1-based page number
-                page: currentPage + 1,
+                page: currentPage,
                 label: `Region ${index + 1}`
             }));
 
             // Get preview dimensions
             const previewImage = document.getElementById('preview-image');
-            // Use displayed (on-screen) dimensions for coordinate scaling
             const previewDimensions = {
-                width: previewImage.offsetWidth,
-                height: previewImage.offsetHeight,
+                width: previewImage.naturalWidth,
+                height: previewImage.naturalHeight,
                 displayWidth: previewImage.offsetWidth,
                 displayHeight: previewImage.offsetHeight
             };
@@ -443,29 +441,26 @@
                 this.bindEvents();
             }
 
-            // ADDED: Function to adjust coordinates for rotated images when needed
+            // ADDED: Function to adjust coordinates for rotated images
             getAdjustedCoords(x, y) {
+                const rotation = appliedRotations[currentPage] || 0;
                 if (!this.image) return { x, y };
-
-                // If we're using a rotated image file for this page, coordinates are already correct
-                const currentImgPath = images[currentPage] || '';
-                if (currentImgPath.includes('rotated')) {
-                    return { x, y };
-                }
-
-                // appliedRotations keys are 1-based page numbers; currentPage is 0-based
-                const rotation = appliedRotations[currentPage + 1] || 0;
-                if (rotation === 0) return { x, y };
 
                 const w = this.image.offsetWidth;
                 const h = this.image.offsetHeight;
 
+                // Only adjust coordinates if image has been rotated and applied to backend
+                if (rotation === 0) return { x, y };
+
                 switch (rotation) {
                     case 90:
+                        // 90 degrees clockwise rotation
                         return { x: h - y, y: x };
                     case 180:
+                        // 180 degrees rotation
                         return { x: w - x, y: h - y };
                     case 270:
+                        // 270 degrees clockwise rotation
                         return { x: y, y: w - x };
                     default:
                         return { x, y };
