@@ -377,8 +377,8 @@
                                 .then(response => response.json())
                                 .then(data => {
                                     if (data.success) {
-                                        // UPDATED: Accumulate the rotation applied to backend (cumulative relative to original)
-                                        appliedRotations[currentPage] = ((appliedRotations[currentPage] || 0) + data.rotation_applied) % 360;
+                                        // UPDATED: Store the actual rotation degree applied to backend
+                                        appliedRotations[currentPage] = data.rotation_applied;
                                         pendingRotation = 0;
                                         
                                         // Update image source to the rotated image
