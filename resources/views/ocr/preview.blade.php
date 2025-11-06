@@ -380,24 +380,34 @@
                                         // UPDATED: Store the actual rotation degree applied to backend
                                         appliedRotations[currentPage] = data.rotation_applied;
                                         pendingRotation = 0;
-                                        
                                         // Update image source to the rotated image
                                         const previewImage = document.getElementById('preview-image');
                                         previewImage.src = data.rotated_image_url + '?t=' + Date.now(); // Add timestamp to force reload
-                                        
                                         // ADDED: Wait for image to load then apply visual rotation to show correct orientation immediately
                                         previewImage.onload = function() {
                                             applyVisualRotation();
                                         };
-                                        
                                         updateRotationButtons();
                                         updateWorkflowPhase();
-                                        
                                         // Show success message
                                         showNotification('Rotation applied successfully!', 'success');
+                                        // ADDED: Ensure status/error UI is not set to error
+                                        const statusError = document.querySelector('.status-error');
+                                        if (statusError) statusError.style.display = 'none';
                                     } else {
                                         console.error('Error applying rotation:', data.message);
                                         showNotification('Error applying rotation: ' + data.message, 'error');
+                                        // ADDED: Show error status only if failed
+                                        let statusError = document.querySelector('.status-error');
+                                        if (!statusError) {
+                                            statusError = document.createElement('div');
+                                            statusError.className = 'status-error bg-red-100 text-red-700 p-2 rounded mt-2';
+                                            statusError.textContent = 'Error applying rotation: ' + data.message;
+                                            document.getElementById('image-preview-container').appendChild(statusError);
+                                        } else {
+                                            statusError.textContent = 'Error applying rotation: ' + data.message;
+                                            statusError.style.display = 'block';
+                                        }
                                     }
                                 })
                                 .catch(error => {
