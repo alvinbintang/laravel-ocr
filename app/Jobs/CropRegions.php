@@ -122,35 +122,25 @@ class CropRegions implements ShouldQueue
                     'note' => 'No additional rotation applied - image is already in correct orientation'
                 ]);
                 
-                // Save cropped image
-                $croppedImageName = "cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
-                $croppedImagePath = "ocr_results/{$this->ocrResultId}/cropped/{$croppedImageName}";
+                // Save cropped image to shared folder with unique naming
+                $croppedImageName = "ocr_{$this->ocrResultId}_cropped_page_{$this->currentPage}_region_{$region['id']}_" . time() . ".png";
+                $croppedImagePath = "ocr/cropped/{$croppedImageName}";
                 
-                // Ensure directory exists
-                Storage::disk('public')->makeDirectory(dirname($croppedImagePath));
+                // Storage facade will create directory automatically
+                Storage::disk('public')->makeDirectory('ocr/cropped');
                 
-                // FIXED: Add logging and error handling for image saving
+                // Save the cropped image
                 try {
-                    // FIXED: Use save() method directly instead of encode() to avoid EncoderInterface error
                     $storagePath = Storage::disk('public')->path($croppedImagePath);
-                    $storageDir = dirname($storagePath);
                     
                     \Log::info("Attempting to save cropped image", [
                         'page' => $this->currentPage,
                         'region_id' => $region['id'],
                         'relative_path' => $croppedImagePath,
-                        'full_path' => $storagePath,
-                        'directory' => $storageDir,
-                        'directory_exists' => file_exists($storageDir)
+                        'full_path' => $storagePath
                     ]);
                     
-                    // FIXED: Ensure directory exists using native PHP
-                    if (!file_exists($storageDir)) {
-                        mkdir($storageDir, 0755, true);
-                        \Log::info("Created directory", ['path' => $storageDir]);
-                    }
-                    
-                    // FIXED: Use save() method directly like in ProcessRegions.php
+                    // Save using Intervention Image directly
                     $croppedImage->save($storagePath);
                     
                     // Verify file was actually saved

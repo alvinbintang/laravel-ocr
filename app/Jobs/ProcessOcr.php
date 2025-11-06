@@ -89,13 +89,11 @@ class ProcessOcr implements ShouldQueue
     private function convertPdfToImages($pdfPath, $ocrResultId)
     {
         $imagePaths = [];
-        // UPDATED: Change to public storage path so images can be accessed via web
-        $outputDir = Storage::disk('public')->path('ocr/images/' . $ocrResultId);
+        // UPDATED: Use shared folder for all images instead of per-ID folders
+        $outputDir = Storage::disk('public')->path('ocr/images');
         
-        // Create output directory if it doesn't exist
-        if (!file_exists($outputDir)) {
-            mkdir($outputDir, 0755, true);
-        }
+        // Storage facade will create directory automatically, no mkdir needed
+        Storage::disk('public')->makeDirectory('ocr/images');
 
         // Check if ImageMagick is installed
         $checkImageMagick = new Process(['magick', '-version']);
@@ -113,7 +111,8 @@ class ProcessOcr implements ShouldQueue
         }
 
         // Convert PDF to images (PNG format for better quality)
-        $outputPattern = $outputDir . '/page-%03d.png';
+        // Use ID prefix to ensure unique filenames in shared folder
+        $outputPattern = $outputDir . '/ocr_' . $ocrResultId . '_page-%03d.png';
         
         // Build command arguments step by step for better compatibility
         $commandArgs = [
@@ -184,11 +183,11 @@ class ProcessOcr implements ShouldQueue
         }
 
         // Collect generated image paths
-        $files = glob($outputDir . '/page-*.png');
+        $files = glob($outputDir . '/ocr_' . $ocrResultId . '_page-*.png');
         sort($files); // Ensure proper page order
 
         foreach ($files as $file) {
-            $relativePath = 'ocr/images/' . $ocrResultId . '/' . basename($file);
+            $relativePath = 'ocr/images/' . basename($file);
             $imagePaths[] = $relativePath;
         }
 

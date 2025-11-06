@@ -359,19 +359,16 @@ class OcrService
                 ];
             }
 
-            // Create rotated directory if it doesn't exist - UPDATED: Use same approach as ProcessOcr
-            $rotatedDir = "ocr/images/{$id}/rotated";
-            $rotatedDirPath = Storage::disk('public')->path($rotatedDir);
+            // UPDATED: Use shared folder for all rotated images instead of per-ID folders
+            $rotatedDir = "ocr/rotated";
             
-            // UPDATED: Use direct mkdir approach like ProcessOcr.php for consistency
-            if (!file_exists($rotatedDirPath)) {
-                mkdir($rotatedDirPath, 0755, true);
-            }
+            // Storage facade will create directory automatically, no mkdir needed
+            Storage::disk('public')->makeDirectory($rotatedDir);
 
-            // Generate rotated image filename - UPDATED: Better path handling
+            // Generate rotated image filename with unique naming in shared folder
             $pathInfo = pathinfo($originalImagePath);
-            $originalFileName = $pathInfo['filename']; // e.g., "page-000"
-            $rotatedImageName = $originalFileName . "_rotated_{$rotationDegree}deg." . $pathInfo['extension'];
+            $originalFileName = $pathInfo['filename']; // e.g., "ocr_{id}_page-000"
+            $rotatedImageName = $originalFileName . "_rotated_{$rotationDegree}deg_" . time() . "." . $pathInfo['extension'];
             $rotatedImagePath = $rotatedDir . '/' . $rotatedImageName;
 
             // Load and rotate the image using Intervention Image
