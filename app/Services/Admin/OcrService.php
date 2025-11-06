@@ -364,6 +364,7 @@ class OcrService
             
             // Storage facade will create directory automatically, no mkdir needed
             Storage::disk('public')->makeDirectory($rotatedDir);
+            $rotatedDirPath = Storage::disk('public')->path($rotatedDir);
 
             // Generate rotated image filename with unique naming in shared folder
             $pathInfo = pathinfo($originalImagePath);
