@@ -225,8 +225,10 @@
                                 
                                 // Get the total rotation (applied + pending)
                                 const appliedRotation = appliedRotations[currentPage] || 0;
-                                // UPDATED: Only use pending rotation for visual display, don't add applied rotation since image is already rotated
-                                const totalRotation = hasAppliedRotation ? pendingRotation : (appliedRotation + pendingRotation) % 360;
+                                const rawRotation = hasAppliedRotation ? pendingRotation : (appliedRotation + pendingRotation);
+                                const normalizedRotation = ((rawRotation % 360) + 360) % 360;
+                                
+                                previewImage.dataset.currentRotation = normalizedRotation;
                                 
                                 // Reset any previous styling
                                 previewImage.style.transform = '';
@@ -256,7 +258,7 @@
                                     let scale, finalWidth, finalHeight;
                                     
                                     // UPDATED: For already applied rotations, use normal scaling since the image file itself is rotated
-                                    if (!hasAppliedRotation && (totalRotation === 90 || totalRotation === 270)) {
+                                    if (!hasAppliedRotation && (normalizedRotation === 90 || normalizedRotation === 270)) {
                                         // For 90° and 270° rotations, we need to consider swapped dimensions
                                         const scaleForWidth = availableWidth / naturalHeight;
                                         const scaleForHeight = availableHeight / naturalWidth;
@@ -282,18 +284,19 @@
                                     previewImage.style.maxHeight = 'none';
                                     
                                     // UPDATED: Container sizing - for already applied rotations, use normal dimensions
-                                    if (!hasAppliedRotation && (totalRotation === 90 || totalRotation === 270)) {
+                                    if (!hasAppliedRotation && (normalizedRotation === 90 || normalizedRotation === 270)) {
                                         imageContainer.style.width = `${finalHeight}px`;
                                         imageContainer.style.height = `${finalWidth}px`;
                                     } else {
                                         imageContainer.style.width = `${finalWidth}px`;
                                         imageContainer.style.height = `${finalHeight}px`;
                                     }
-                                    
-                                    // UPDATED: Only apply rotation transform if there's actual rotation to apply
-                                    if (totalRotation !== 0) {
-                                        previewImage.style.transform = `rotate(${totalRotation}deg)`;
-                                    }
+                                }
+                                
+                                if (normalizedRotation !== 0) {
+                                    previewImage.style.transform = `rotate(${normalizedRotation}deg)`;
+                                } else {
+                                    previewImage.style.transform = '';
                                 }
                             }
                             
@@ -492,6 +495,7 @@
                                     // UPDATED: Check if this page has been rotated and applied to backend
                                     const hasAppliedRotation = appliedRotations[currentPage] !== undefined;
                                     const rotation = hasAppliedRotation ? 0 : (pageRotations[currentPage] || 0); // UPDATED: Don't apply visual rotation if already applied to backend
+                                    const normalizedRotation = ((rotation % 360) + 360) % 360;
                                     
                                     // Reset any previous styling
                                     previewImage.style.transform = '';
@@ -507,6 +511,8 @@
                                     const naturalWidth = previewImage.naturalWidth;
                                     const naturalHeight = previewImage.naturalHeight;
                                     
+                                    previewImage.dataset.currentRotation = normalizedRotation;
+                                    
                                     if (naturalWidth && naturalHeight) {
                                         // Get available space in the preview container
                                         const containerRect = previewContainer.getBoundingClientRect();
@@ -521,7 +527,7 @@
                                         let scale, finalWidth, finalHeight;
                                         
                                         // UPDATED: For already rotated images, use normal scaling since the image file itself is rotated
-                                        if (!hasAppliedRotation && (rotation === 90 || rotation === 270)) {
+                                        if (!hasAppliedRotation && (normalizedRotation === 90 || normalizedRotation === 270)) {
                                             // For 90° and 270° rotations, we need to consider swapped dimensions
                                             // The rotated image will have height as width and width as height
                                             const scaleForWidth = availableWidth / naturalHeight;
@@ -560,9 +566,11 @@
                                         
                                         imageContainer.style.overflow = 'visible';
                                         
-                                        // UPDATED: Only apply CSS transform rotation if not already applied to backend
-                                        if (!hasAppliedRotation) {
-                                            previewImage.style.transform = `rotate(${rotation}deg)`;
+                                        // UPDATED: Apply CSS transform only when rotation is pending on frontend
+                                        if (!hasAppliedRotation && normalizedRotation !== 0) {
+                                            previewImage.style.transform = `rotate(${normalizedRotation}deg)`;
+                                        } else {
+                                            previewImage.style.transform = '';
                                         }
                                         
                                         // Ensure container is centered
@@ -570,9 +578,10 @@
                                         
                                     } else {
                                         // Fallback for when natural dimensions aren't available yet
-                                        // UPDATED: Only apply transform if not already applied to backend
-                                        if (!hasAppliedRotation) {
-                                            previewImage.style.transform = `rotate(${rotation}deg)`;
+                                        if (!hasAppliedRotation && normalizedRotation !== 0) {
+                                            previewImage.style.transform = `rotate(${normalizedRotation}deg)`;
+                                        } else {
+                                            previewImage.style.transform = '';
                                         }
                                         previewImage.style.maxWidth = '100%';
                                         previewImage.style.height = 'auto';
@@ -1103,9 +1112,15 @@
             }
 
             getAdjustedCoords(x, y) {
-                const rotation = pageRotations?.[this.currentPage] || 0;
                 const img = this.previewImage;
                 if (!img) return { x, y };
+
+                const rotationAttr = img.dataset?.currentRotation ?? '0';
+                let rotation = parseInt(rotationAttr, 10);
+                if (isNaN(rotation)) {
+                    rotation = 0;
+                }
+                rotation = ((rotation % 360) + 360) % 360;
 
                 const w = img.clientWidth;
                 const h = img.clientHeight;
