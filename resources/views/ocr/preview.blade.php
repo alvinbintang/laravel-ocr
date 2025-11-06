@@ -1675,7 +1675,7 @@
                     const iMatch = line.match(itemRegex);
                     if (iMatch) {
                         const nomor = iMatch[1].replace('.', '');
-                        let remainder = line.slice(iMatch[0].length).trim();
+                        let remainder = iMatch[2].trim(); // gunakan capture group kedua untuk sisa kalimat
                         let tokens = remainder.split(/\s+/);
 
                         // Extract numeric columns from the END of tokens
