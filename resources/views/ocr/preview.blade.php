@@ -138,6 +138,7 @@
                         <div class="relative mb-6 bg-gray-300 min-h-96 flex items-center justify-center" id="image-preview-container">
                             
                             <script>
+                                let totalPages = {{ $ocrResult->page_count ?? 1 }}; // ADDED: Define totalPages from backend
                                 // UPDATED: Initialize rotation variables and workflow state
                                 let pageRotations = {!! json_encode($ocrResult->page_rotations ?? []) !!} || {};
                                 let currentPage = 1;
