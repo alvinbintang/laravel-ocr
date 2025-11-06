@@ -1686,18 +1686,12 @@
                             if (!jumlah && isCurrency(tok)) { jumlah = tok; tokens.splice(idx,1); continue; }
                             if (!harga_satuan && isCurrency(tok)) { harga_satuan = tok; tokens.splice(idx,1); continue; }
                         }
-                        // After removing harga & jumlah, capture potential multi-token volume (numbers + units)
+                        // After removing harga & jumlah, capture volume (angka + satuan)
                         if (tokens.length >= 2) {
-                            // volume usually at end
-                            const volTokens = [];
-                            while (tokens.length && /[0-9]/.test(tokens[tokens.length-1])) {
-                                volTokens.unshift(tokens.pop());
-                            }
-                            // Might also include unit word after number (e.g., "buah", "lembar")
-                            if (tokens.length) {
-                                volTokens.push(tokens.pop());
-                            }
+                            // Ambil 2 token terakhir sebagai volume karena pola tabel selalu "angka satuan"
+                            const volTokens = tokens.slice(-2);
                             volume = volTokens.join(' ');
+                            tokens.splice(tokens.length - 2, 2); // hapus dari tokens utama
                         }
 
                         // Determine keterangan (DDS etc.) — token that is all uppercase letters
