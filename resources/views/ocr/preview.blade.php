@@ -55,10 +55,14 @@
                                         </span>
                                     @endif
                                 </p>
+                                <div class="flex items-center mt-2">
+                                    <span class="text-sm text-gray-500">Workflow:</span>
+                                    <span id="phase-indicator" class="ml-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">Phase 1: Rotation</span>
+                                </div>
                             </div>
                             
                             @if($ocrResult->status === 'awaiting_selection' && $ocrResult->page_count > 0)
-                            <div class="flex flex-wrap gap-2">
+                            <div id="rotation-controls" class="flex flex-wrap gap-2">
                                 <!-- UPDATED: Rotation Controls -->
                                 <button id="rotate-left-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -425,7 +429,10 @@
                             // ADDED: Function to update workflow phase
                             function updateWorkflowPhase() {
                                 const phaseIndicator = document.getElementById('phase-indicator');
-                                const rotationControls = document.getElementById('rotation-controls');
+                                
+                                if (!phaseIndicator) {
+                                    return;
+                                }
                                 
                                 // Check if current page has pending rotation or if we're in rotation phase
                                 const hasAppliedRotation = appliedRotations[currentPage] !== undefined;
@@ -434,15 +441,15 @@
                                 if (hasPendingRotation) {
                                     currentWorkflowPhase = 'rotation';
                                     phaseIndicator.textContent = 'Phase 1: Rotation (Pending)';
-                                    phaseIndicator.className = 'ml-4 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium';
+                                    phaseIndicator.className = 'ml-2 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium';
                                 } else if (hasAppliedRotation || pendingRotation === 0) {
                                     currentWorkflowPhase = 'selection';
                                     phaseIndicator.textContent = 'Phase 2: Area Selection';
-                                    phaseIndicator.className = 'ml-4 px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium';
+                                    phaseIndicator.className = 'ml-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium';
                                 } else {
                                     currentWorkflowPhase = 'rotation';
                                     phaseIndicator.textContent = 'Phase 1: Rotation';
-                                    phaseIndicator.className = 'ml-4 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium';
+                                    phaseIndicator.className = 'ml-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium';
                                 }
                                 
                                 // Enable/disable region selection based on phase
@@ -1763,6 +1770,8 @@
         // REMOVED: Duplicate rotation functions - using the newer implementation above
         
         // Update process button state based on total regions
-        this.updateProcessButton();
+        if (window.regionManager && typeof window.regionManager.updateProcessButton === 'function') {
+            window.regionManager.updateProcessButton();
+        }
     });
 </script>
