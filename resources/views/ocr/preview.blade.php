@@ -143,7 +143,7 @@
                             
                             <script>
                                 let totalPages = {{ $ocrResult->page_count ?? 1 }}; // ADDED: Define totalPages from backend
-            const documentType = '{{ $ocrResult->document_type ?? "RAB" }}'; // ADDED: document type from backend
+                                var documentType = '{{ $ocrResult->document_type ?? "RAB" }}'; // ADDED: document type from backend; use var for global scope
                                 // UPDATED: Initialize rotation variables and workflow state
                                 let pageRotations = {!! json_encode($ocrResult->page_rotations ?? []) !!} || {};
                                 let currentPage = 1;
