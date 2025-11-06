@@ -143,6 +143,7 @@
                             
                             <script>
                                 let totalPages = {{ $ocrResult->page_count ?? 1 }}; // ADDED: Define totalPages from backend
+            const documentType = '{{ $ocrResult->document_type ?? "RAB" }}'; // ADDED: document type from backend
                                 // UPDATED: Initialize rotation variables and workflow state
                                 let pageRotations = {!! json_encode($ocrResult->page_rotations ?? []) !!} || {};
                                 let currentPage = 1;
@@ -1614,8 +1615,13 @@
             showJsonModal(combinedResult);
         }
 
-        // ADDED: Parse individual page function
-        function parsePage(text, regionIndex, pageNumber) { // UPDATED: full hierarchical parsing
+        // ADDED: Parse individual page function (dispatcher)
+        function parsePage(text, regionIndex, pageNumber) {
+            // If document type is RKA, use specialized parser; keep RAB logic untouched
+            if (documentType === 'RKA') {
+                return parsePageRKA(text, regionIndex, pageNumber);
+            }
+            // === RAB default parser (existing logic) ===
             // --- Initialize page structure ---
             const pageData = {
                 page_number: pageNumber,
@@ -1717,6 +1723,82 @@
 
             // Push last group if any
             if (currentGroup) pageData.belanja.push(currentGroup);
+
+            return pageData;
+        }
+
+        // ======================= RKA SPECIFIC PARSER =======================
+        function parsePageRKA(text, regionIndex, pageNumber) {
+            const pageData = {
+                page_number: pageNumber,
+                header: {
+                    bidang: null,
+                    sub_bidang: null,
+                    kegiatan: null,
+                    waktu_pelaksanaan: null,
+                    output_keluaran: null
+                },
+                belanja: []
+            };
+            if (!text || text.trim() === '') return pageData;
+
+            const headerPatterns = [
+                { key: 'bidang', regex: /Bidang\s*:?[\t ]*(.+?)(?:\n|$)/i },
+                { key: 'sub_bidang', regex: /Sub[\t ]*Bidang\s*:?[\t ]*(.+?)(?:\n|$)/i },
+                { key: 'kegiatan', regex: /Kegiatan\s*:?[\t ]*(.+?)(?:\n|$)/i },
+                { key: 'waktu_pelaksanaan', regex: /Waktu[\t ]*Pelaksanaan\s*:?[\t ]*(.+?)(?:\n|$)/i },
+                { key: 'output_keluaran', regex: /Output\/?Keluaran\s*:?[\t ]*(.+?)(?:\n|$)/i }
+            ];
+            headerPatterns.forEach(({ key, regex }) => {
+                const m = text.match(regex);
+                if (m) pageData.header[key] = m[1].replace(/\s+/g, ' ').trim();
+            });
+
+            const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+            const codeRegex = /^(\d+\.\d+\.\d+\.\d+\.)\s+(.+)/;
+            const isCurrency = str => /\d{1,3}(?:\.\d{3})*,\d{2}$/.test(str);
+            const bulanKeys = ['jan','feb','mar','apr','mei','jun','jul','ags','sep','okt','nov','des'];
+
+            lines.forEach(line => {
+                const m = line.match(codeRegex);
+                if (!m) return;
+                const kode = m[1].trim();
+                let remainder = m[2].replace(/\|/g, ' ').trim();
+                let tokens = remainder.split(/\s+/).filter(Boolean);
+
+                const currencyTokens = tokens.filter(isCurrency);
+                if (currencyTokens.length === 0) return;
+
+                const anggaran = currencyTokens[0];
+                const jumlah_anggaran = currencyTokens[currencyTokens.length - 1];
+
+                // Remove all currency tokens
+                tokens = tokens.filter(t => !isCurrency(t));
+
+                let keterangan = null;
+                tokens = tokens.filter(t => {
+                    if (/^[A-Z]{2,}$/.test(t)) { keterangan = t; return false; }
+                    return true;
+                });
+
+                const uraian = tokens.join(' ').replace(/\s+/g, ' ').trim();
+
+                const bulanObj = {};
+                bulanKeys.forEach(k => bulanObj[k] = '0,00');
+                // fill bulan values from currencyTokens between first and last
+                currencyTokens.slice(1, -1).forEach((val, idx) => {
+                    if (idx < bulanKeys.length) bulanObj[bulanKeys[idx]] = val;
+                });
+
+                pageData.belanja.push({
+                    kode,
+                    uraian,
+                    keterangan: keterangan || null,
+                    anggaran,
+                    jumlah_anggaran,
+                    bulan: bulanObj
+                });
+            });
 
             return pageData;
         }
