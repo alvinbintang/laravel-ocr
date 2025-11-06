@@ -1615,77 +1615,116 @@
         }
 
         // ADDED: Parse individual page function
-        function parsePage(text, regionIndex, pageNumber) {
-            const data = {
-                region_id: regionIndex,
+        function parsePage(text, regionIndex, pageNumber) { // UPDATED: full hierarchical parsing
+            // --- Initialize page structure ---
+            const pageData = {
                 page_number: pageNumber,
-                bidang: null,
-                sub_bidang: null,
-                kegiatan: null,
-                waktu_pelaksanaan: null,
-                output_keluaran: null,
+                header: {
+                    bidang: null,
+                    sub_bidang: null,
+                    kegiatan: null,
+                    waktu_pelaksanaan: null,
+                    output_keluaran: null
+                },
                 belanja: []
             };
 
             if (!text || text.trim() === '') {
-                return data;
+                return pageData; // Return empty shell if no OCR text
             }
 
-            // Header detection with improved regex patterns
-            const bidangMatch = text.match(/Bidang\s*:?\s*(.+?)(?:\n|$)/i);
-            if (bidangMatch) data.bidang = bidangMatch[1].trim();
+            /* ===================== 1. HEADER EXTRACTION ===================== */
+            const headerPatterns = [
+                { key: 'bidang', regex: /Bidang\s*:?[\t ]*(.+?)(?:\n|$)/i },
+                { key: 'sub_bidang', regex: /Sub[\t ]*Bidang\s*:?[\t ]*(.+?)(?:\n|$)/i },
+                { key: 'kegiatan', regex: /Kegiatan\s*:?[\t ]*(.+?)(?:\n|$)/i },
+                { key: 'waktu_pelaksanaan', regex: /Waktu[\t ]*Pelaksanaan\s*:?[\t ]*(.+?)(?:\n|$)/i },
+                { key: 'output_keluaran', regex: /Output\/?Keluaran\s*:?[\t ]*(.+?)(?:\n|$)/i }
+            ];
+            headerPatterns.forEach(({ key, regex }) => {
+                const m = text.match(regex);
+                if (m) pageData.header[key] = m[1].trim();
+            });
 
-            const subMatch = text.match(/Sub\s*Bidang\s*:?\s*(.+?)(?:\n|$)/i);
-            if (subMatch) data.sub_bidang = subMatch[1].trim();
+            /* ===================== 2. TABLE / BELANJA PARSING ===================== */
+            const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+            const groupRegex = /^(\d+\.\d+\.\d+\.\d+\.)\s+(.+)$/; // e.g. 5.2.1.01. Belanja ...
+            const itemRegex = /^(\d{2}\.)\s+(.+)/; // e.g. 01. Buku folio ...
 
-            const kegMatch = text.match(/Kegiatan\s*:?\s*(.+?)(?:\n|$)/i);
-            if (kegMatch) data.kegiatan = kegMatch[1].trim();
+            let currentGroup = null;
 
-            const waktuMatch = text.match(/Waktu\s*Pelaksanaan\s*:?\s*(.+?)(?:\n|$)/i);
-            if (waktuMatch) data.waktu_pelaksanaan = waktuMatch[1].trim();
+            const isCurrency = str => /\d{1,3}(?:\.\d{3})*,\d{2}$/.test(str);
+            const isVolume = str => /\d+[\w\s]*$/i.test(str) && !isCurrency(str);
 
-            const outMatch = text.match(/Output\/Keluaran\s*:?\s*(.+?)(?:\n|$)/i);
-            if (outMatch) data.output_keluaran = outMatch[1].trim();
-
-            // Belanja/Table parsing
-            const lines = text.split("\n").map(l => l.trim()).filter(l => l);
-            
             lines.forEach(line => {
-                // Detect table rows with price format and DDS
-                if (/\d{1,3}(\.\d{3})*,\d{2}/.test(line) && /DDS/i.test(line)) {
-                    // Try structured parsing first
-                    const parts = line.split(/\s{2,}|\t/).filter(Boolean);
-                    if (parts.length >= 5) {
-                        data.belanja.push({
-                            kode: parts[0].replace(/\.$/, ""),
-                            uraian: parts[1],
-                            volume: parts[2],
-                            harga_satuan: parts[3],
-                            jumlah: parts[4]
-                        });
-                    } else {
-                        // Fallback parsing for messy OCR
-                        const tokens = line.split(/\s+/);
-                        const priceTokens = tokens.filter(t => /\d{1,3}(\.\d{3})*,\d{2}/.test(t));
-                        if (priceTokens.length >= 2) {
-                            const kodeIndex = 0;
-                            const hargaIndex = tokens.lastIndexOf(priceTokens[priceTokens.length - 2]);
-                            const jumlahIndex = tokens.lastIndexOf(priceTokens[priceTokens.length - 1]);
-                            const volumeIndex = hargaIndex - 1;
-                            
-                            data.belanja.push({
-                                kode: tokens[kodeIndex] || '',
-                                uraian: tokens.slice(1, volumeIndex).join(" ") || '',
-                                volume: tokens[volumeIndex] || '',
-                                harga_satuan: tokens[hargaIndex] || '',
-                                jumlah: tokens[jumlahIndex] || ''
-                            });
+                // --- detect group line ---
+                const gMatch = line.match(groupRegex);
+                if (gMatch) {
+                    // Save previous group
+                    if (currentGroup) pageData.belanja.push(currentGroup);
+                    currentGroup = {
+                        kode: gMatch[1].trim(),
+                        uraian: gMatch[2].trim(),
+                        items: []
+                    };
+                    return; // processed this line
+                }
+
+                // --- detect item line (requires current group) ---
+                if (currentGroup) {
+                    const iMatch = line.match(itemRegex);
+                    if (iMatch) {
+                        const nomor = iMatch[1].replace('.', '');
+                        let remainder = line.slice(iMatch[0].length).trim();
+                        let tokens = remainder.split(/\s+/);
+
+                        // Extract numeric columns from the END of tokens
+                        let jumlah = '', harga_satuan = '', volume = '';
+                        // iterate backwards
+                        for (let idx = tokens.length - 1; idx >= 0; idx--) {
+                            const tok = tokens[idx];
+                            if (!jumlah && isCurrency(tok)) { jumlah = tok; tokens.splice(idx,1); continue; }
+                            if (!harga_satuan && isCurrency(tok)) { harga_satuan = tok; tokens.splice(idx,1); continue; }
                         }
+                        // After removing harga & jumlah, capture potential multi-token volume (numbers + units)
+                        if (tokens.length >= 2) {
+                            // volume usually at end
+                            const volTokens = [];
+                            while (tokens.length && /[0-9]/.test(tokens[tokens.length-1])) {
+                                volTokens.unshift(tokens.pop());
+                            }
+                            // Might also include unit word after number (e.g., "buah", "lembar")
+                            if (tokens.length) {
+                                volTokens.push(tokens.pop());
+                            }
+                            volume = volTokens.join(' ');
+                        }
+
+                        // Determine keterangan (DDS etc.) — token that is all uppercase letters
+                        let keterangan = null;
+                        tokens = tokens.filter(t => {
+                            if (/^[A-Z]{2,}$/.test(t)) { keterangan = t; return false; }
+                            return true;
+                        });
+
+                        const uraianItem = tokens.join(' ').trim();
+
+                        currentGroup.items.push({
+                            nomor,
+                            uraian: uraianItem,
+                            keterangan: keterangan || null,
+                            volume,
+                            harga_satuan,
+                            jumlah
+                        });
                     }
                 }
             });
 
-            return data;
+            // Push last group if any
+            if (currentGroup) pageData.belanja.push(currentGroup);
+
+            return pageData;
         }
 
         // ADDED: Show JSON result in modal
