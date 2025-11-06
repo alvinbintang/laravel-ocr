@@ -239,35 +239,6 @@ class OcrService
         ];
     }
 
-    /**
-     * Prepare CSV export data
-     *
-     * @param int $id
-     * @return array
-     */
-    public function prepareCsvExportData(int $id): array
-    {
-        $ocrResult = $this->ocrResultRepository->findById($id);
-        
-        $csvData = [];
-        foreach ($ocrResult->ocr_results as $result) {
-            $csvData[] = [
-                $result['page'] ?? 1,
-                $result['region_id'] ?? '',
-                $result['coordinates']['x'] ?? 0,
-                $result['coordinates']['y'] ?? 0,
-                $result['coordinates']['width'] ?? 0,
-                $result['coordinates']['height'] ?? 0,
-                $result['text'] ?? ''
-            ];
-        }
-
-        return [
-            'filename' => pathinfo($ocrResult->filename, PATHINFO_FILENAME) . '_ocr_results.csv',
-            'headers' => ['Page', 'Region ID', 'X', 'Y', 'Width', 'Height', 'Text'],
-            'data' => $csvData
-        ];
-    }
     
     /**
      * Save page rotations for OCR result

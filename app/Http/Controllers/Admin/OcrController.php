@@ -176,43 +176,7 @@ class OcrController extends Controller
             ->header('Content-Type', 'application/json');
     }
     
-    /**
-     * Export OCR results to CSV format
-     */
-    public function exportCsv($id)
-    {
-        try {
-            $this->ocrService->isReadyForExport($id); // UPDATED: this throws exception if not ready
-        } catch (\Exception $e) {
-            return redirect()->back()->with('error', $e->getMessage());
-        }
-        
-        $exportData = $this->ocrService->prepareCsvExportData($id); // UPDATED: changed from prepareCsvExport()
-        
-        $headers = [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="' . $exportData['filename'] . '"',
-            'Pragma' => 'no-cache',
-            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
-            'Expires' => '0'
-        ];
-        
-        $callback = function() use ($exportData) {
-            $file = fopen('php://output', 'w');
-            
-            // Add CSV header
-            fputcsv($file, $exportData['headers']); // UPDATED: use headers from export data
-            
-            // Add data rows
-            foreach ($exportData['data'] as $row) { // UPDATED: data is already formatted
-                fputcsv($file, $row);
-            }
-            
-            fclose($file);
-        };
-        
-        return response()->stream($callback, 200, $headers);
-    }
+
     
     public function saveRotations(Request $request, $id)
     {

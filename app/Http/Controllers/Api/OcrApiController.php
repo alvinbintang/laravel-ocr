@@ -8,7 +8,6 @@ use Illuminate\Http\JsonResponse;
 use App\Http\Requests\OcrExtractRequest;
 use App\Http\Requests\ProcessRegionsRequest;
 use App\Services\Admin\OcrService;
-use App\Services\Admin\ExcelExportService;
 use App\Http\Resources\OcrResultResource; // ADDED: OCR result resource
 use App\Http\Resources\OcrResultCollection; // ADDED: OCR result collection
 use Illuminate\Support\Facades\Validator;
@@ -16,12 +15,10 @@ use Illuminate\Support\Facades\Validator;
 class OcrApiController extends Controller
 {
     protected $ocrService;
-    protected $excelExportService;
 
-    public function __construct(OcrService $ocrService, ExcelExportService $excelExportService)
+    public function __construct(OcrService $ocrService)
     {
         $this->ocrService = $ocrService;
-        $this->excelExportService = $excelExportService;
     }
 
     /**
@@ -264,67 +261,7 @@ class OcrApiController extends Controller
         }
     }
 
-    /**
-     * Export to CSV
-     */
-    public function exportCsv($id): JsonResponse
-    {
-        try {
-            $this->ocrService->isReadyForExport($id);
-            $exportData = $this->ocrService->prepareCsvExportData($id);
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'CSV export data retrieved successfully',
-                'data' => [
-                    'filename' => $exportData['filename'],
-                    'headers' => $exportData['headers'],
-                    'data' => $exportData['data']
-                ]
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to export CSV',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
 
-    /**
-     * Export to Excel
-     */
-    public function exportExcel($id): JsonResponse
-    {
-        try {
-            $this->ocrService->isReadyForExport($id);
-            
-            // Get OCR result for Excel export
-            $ocrResult = $this->ocrService->getOcrResultById($id);
-            
-            if (!$ocrResult) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'OCR result not found'
-                ], 404);
-            }
-
-            // Generate Excel file and get download URL or base64
-            $excelData = $this->excelExportService->exportToExcel($ocrResult);
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Excel export generated successfully',
-                'data' => $excelData
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to export Excel',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
 
     /**
      * Save rotations

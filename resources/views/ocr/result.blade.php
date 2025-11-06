@@ -22,11 +22,7 @@
                         @elseif ($ocrResult->status == 'done')
                             <h5>Extracted Text:</h5>
                             <pre class="bg-light p-3 rounded">{{ $ocrResult->text }}</pre>
-                            <div class="mt-3">
-                                <a href="{{ route('ocr.export', ['id' => $ocrResult->id]) }}" class="btn btn-success me-2">
-                                    <i class="fas fa-file-excel"></i> Export to Excel
-                                </a>
-                            </div>
+                            
                         @elseif ($ocrResult->status == 'error')
                             <div class="alert alert-danger" role="alert">
                                 Terjadi kesalahan saat memproses file: {{ $ocrResult->text }}

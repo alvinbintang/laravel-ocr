@@ -673,14 +673,8 @@
                                     <button id="convert-to-json-btn" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-md text-sm font-medium">
                                         Convert to Structured JSON
                                     </button>
-                                    <a href="{{ route('ocr.export', $ocrResult->id) }}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium">
-                                        Export to Excel
-                                    </a>
                                     <a href="{{ route('ocr.export-json', $ocrResult->id) }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium">
                                         Export JSON
-                                    </a>
-                                    <a href="{{ route('ocr.export-csv', $ocrResult->id) }}" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm font-medium">
-                                        Export CSV
                                     </a>
                                 </div>
                             </div>

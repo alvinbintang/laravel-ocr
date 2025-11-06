@@ -51,8 +51,6 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Export routes
         Route::get('/{id}/export/json', [OcrApiController::class, 'exportJson']);
-        Route::get('/{id}/export/csv', [OcrApiController::class, 'exportCsv']);
-        Route::get('/{id}/export/excel', [OcrApiController::class, 'exportExcel']);
         
         // Save rotations
         Route::post('/{id}/save-rotations', [OcrApiController::class, 'saveRotations']);
