@@ -89,10 +89,10 @@ class ProcessOcr implements ShouldQueue
     private function convertPdfToImages($pdfPath, $ocrResultId)
     {
         $imagePaths = [];
-        // UPDATED: Use global folder for all images
-        $outputDir = Storage::disk('public')->path('ocr/images');
+        // UPDATED: Change to public storage path so images can be accessed via web
+        $outputDir = Storage::disk('public')->path('ocr/images/' . $ocrResultId);
         
-        // Create output directory if it doesn't exist (one-time global folder)
+        // Create output directory if it doesn't exist
         if (!file_exists($outputDir)) {
             mkdir($outputDir, 0755, true);
         }
@@ -113,8 +113,7 @@ class ProcessOcr implements ShouldQueue
         }
 
         // Convert PDF to images (PNG format for better quality)
-        // Use ID in filename to ensure uniqueness in global folder
-        $outputPattern = $outputDir . '/ocr_' . $ocrResultId . '_page-%03d.png';
+        $outputPattern = $outputDir . '/page-%03d.png';
         
         // Build command arguments step by step for better compatibility
         $commandArgs = [
@@ -185,11 +184,11 @@ class ProcessOcr implements ShouldQueue
         }
 
         // Collect generated image paths
-        $files = glob($outputDir . '/ocr_' . $ocrResultId . '_page-*.png');
+        $files = glob($outputDir . '/page-*.png');
         sort($files); // Ensure proper page order
 
         foreach ($files as $file) {
-            $relativePath = 'ocr/images/' . basename($file);
+            $relativePath = 'ocr/images/' . $ocrResultId . '/' . basename($file);
             $imagePaths[] = $relativePath;
         }
 
