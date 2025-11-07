@@ -6,6 +6,10 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Preview - Laravel OCR</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ADDED: Global documentType definition -->
+    <script>
+        window.documentType = '{{ $ocrResult->document_type ?? "RAB" }}';
+    </script>
 </head>
 <body class="bg-gray-100">
     <div class="min-h-screen">
@@ -1755,40 +1759,56 @@
             });
 
             const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-            const codeRegex = /^(\d+\.\d+\.\d+\.\d+\.)\s+(.+)/;
-            const isCurrency = str => /\d{1,3}(?:\.\d{3})*,\d{2}$/.test(str);
+            // UPDATED: accept variable-depth account code, must end with dot
+            const codeRegex = /^(\d+(?:\.\d+)*\.)\s+(.+)/;
+            // UPDATED: flexible currency detection (e.g., 1.500.000,00 or 0,00)
+            const isCurrency = str => /^\d{1,3}(?:\.\d{3})*(?:,\d{2})?$/.test(str);
             const bulanKeys = ['jan','feb','mar','apr','mei','jun','jul','ags','sep','okt','nov','des'];
 
-            lines.forEach(line => {
-                const m = line.match(codeRegex);
-                if (!m) return;
-                const kode = m[1].trim();
-                let remainder = m[2].replace(/\|/g, ' ').trim();
-                let tokens = remainder.split(/\s+/).filter(Boolean);
+            // Iterate through lines with manual index to aggregate multi-line rows
+            for (let i = 0; i < lines.length; i++) {
+                const firstMatch = lines[i].match(codeRegex);
+                if (!firstMatch) continue;
 
-                const currencyTokens = tokens.filter(isCurrency);
-                if (currencyTokens.length === 0) return;
+                const kode = firstMatch[1].trim();
+
+                // Gather tokens from current and subsequent lines until next code row
+                let combinedTokens = firstMatch[2].replace(/\|/g, ' ').trim().split(/\s+/).filter(Boolean);
+                let j = i + 1;
+                while (j < lines.length && !codeRegex.test(lines[j])) {
+                    combinedTokens.push(...lines[j].split(/\s+/).filter(Boolean));
+                    j++;
+                }
+                i = j - 1; // Skip processed lines
+
+                const currencyTokens = combinedTokens.filter(isCurrency);
+                if (currencyTokens.length < 2) continue; // Need at least anggaran & total
 
                 const anggaran = currencyTokens[0];
                 const jumlah_anggaran = currencyTokens[currencyTokens.length - 1];
 
-                // Remove all currency tokens
-                tokens = tokens.filter(t => !isCurrency(t));
+                // Build bulan allocation object
+                const bulanObj = {};
+                bulanKeys.forEach(k => bulanObj[k] = '0,00');
+                const bulanValues = currencyTokens.slice(1, -1);
+                bulanValues.forEach((val, idx) => {
+                    if (idx < bulanKeys.length) bulanObj[bulanKeys[idx]] = val;
+                });
 
+                // Remove currency tokens from combinedTokens to isolate text
+                combinedTokens = combinedTokens.filter(t => !isCurrency(t));
+
+                // Extract keterangan (uppercase words like DDS)
                 let keterangan = null;
-                tokens = tokens.filter(t => {
-                    if (/^[A-Z]{2,}$/.test(t)) { keterangan = t; return false; }
+                combinedTokens = combinedTokens.filter(t => {
+                    if (/^[A-Z]{2,}$/.test(t)) {
+                        keterangan = t;
+                        return false;
+                    }
                     return true;
                 });
 
-                const uraian = tokens.join(' ').replace(/\s+/g, ' ').trim();
-
-                const bulanObj = {};
-                bulanKeys.forEach(k => bulanObj[k] = '0,00');
-                // fill bulan values from currencyTokens between first and last
-                currencyTokens.slice(1, -1).forEach((val, idx) => {
-                    if (idx < bulanKeys.length) bulanObj[bulanKeys[idx]] = val;
-                });
+                const uraian = combinedTokens.join(' ').replace(/\s+/g, ' ').trim();
 
                 pageData.belanja.push({
                     kode,
@@ -1798,7 +1818,7 @@
                     jumlah_anggaran,
                     bulan: bulanObj
                 });
-            });
+            }
 
             return pageData;
         }
